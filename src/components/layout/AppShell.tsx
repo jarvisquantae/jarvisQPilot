@@ -15,7 +15,10 @@ import {
 import { QPilotLogo } from "@/components/brand/QPilotLogo";
 import { SummitMark } from "@/components/brand/SummitMark";
 import { cn } from "@/lib/utils";
-import { currentUser, QUARTERS, QUARTER_LABEL } from "@/data/mock";
+import { QUARTERS, QUARTER_LABEL } from "@/data/mock";
+import { useAuth } from "@/lib/auth";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { LogOut, UserCircle2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,6 +122,8 @@ export function AppShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [quarter, setQuarter] = useState(QUARTER_LABEL);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const { user, signOut } = useAuth();
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -195,17 +200,20 @@ export function AppShell({
             <DropdownMenu>
               <DropdownMenuTrigger className="inline-flex h-10 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card pl-1.5 pr-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <span className="grid size-7 place-items-center rounded-lg bg-navy text-[11px] font-bold text-navy-foreground">
-                  {currentUser.initials}
+                  {user.initials}
                 </span>
                 <span className="hidden text-xs font-bold text-navy sm:block">
-                  {currentUser.roleLabel}
+                  {user.roleLabel}
                 </span>
                 <ChevronDown className="size-3.5 text-muted-foreground" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-60">
                 <DropdownMenuLabel>
-                  <p className="font-bold text-navy">{currentUser.roleLabel}</p>
-                  <p className="text-xs font-normal text-muted-foreground">{currentUser.email}</p>
+                  <p className="font-bold text-navy">{user.name}</p>
+                  <p className="text-xs font-normal text-muted-foreground">{user.email}</p>
+                  <span className="mt-1 inline-block rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-extrabold text-primary uppercase">
+                    {user.roleLabel}
+                  </span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
@@ -214,8 +222,22 @@ export function AppShell({
                 <DropdownMenuItem asChild>
                   <Link to="/notifications">Notifications</Link>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setAuthModalOpen(true)} className="cursor-pointer gap-2">
+                  <UserCircle2 className="size-4 text-primary" />
+                  <span>Switch Role / Account</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => signOut()}
+                  className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                >
+                  <LogOut className="size-4" />
+                  <span>Sign out</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <AuthModal open={authModalOpen} onOpenChange={setAuthModalOpen} />
           </div>
         </header>
 

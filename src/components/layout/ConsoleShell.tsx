@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowLeftRight, ChevronDown, Menu, Search, X, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, LogOut, Menu, Search, UserCircle2, X, type LucideIcon } from "lucide-react";
 import { QPilotLogo } from "@/components/brand/QPilotLogo";
 import { cn } from "@/lib/utils";
 import { QUARTERS, QUARTER_LABEL } from "@/data/mock";
+import { useAuth } from "@/lib/auth";
+import { AuthModal } from "@/components/auth/AuthModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,6 +94,13 @@ export function ConsoleShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [quarter, setQuarter] = useState(QUARTER_LABEL);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const { user, signOut } = useAuth();
+
+  const displayInitials = user?.initials || initials;
+  const displayRole = user?.roleLabel || roleLabel;
+  const displayEmail = user?.email || email;
+  const displayName = user?.name || roleLabel;
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -173,22 +182,39 @@ export function ConsoleShell({
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex h-10 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card pl-1.5 pr-3 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <span className="grid size-7 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
-                {initials}
+                {displayInitials}
               </span>
-              <span className="hidden text-xs font-bold text-navy sm:block">{roleLabel}</span>
+              <span className="hidden text-xs font-bold text-navy sm:block">{displayRole}</span>
               <ChevronDown className="size-3.5 text-muted-foreground" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuLabel>
-                <p className="font-bold text-navy">{roleLabel}</p>
-                <p className="text-xs font-normal text-muted-foreground">{email}</p>
+                <p className="font-bold text-navy">{displayName}</p>
+                <p className="text-xs font-normal text-muted-foreground">{displayEmail}</p>
+                <span className="mt-1 inline-block rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-extrabold text-primary uppercase">
+                  {displayRole}
+                </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link to="/dashboard">Switch to Territory Manager</Link>
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setAuthModalOpen(true)} className="cursor-pointer gap-2">
+                <UserCircle2 className="size-4 text-primary" />
+                <span>Switch Role / Account</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => signOut()}
+                className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+              >
+                <LogOut className="size-4" />
+                <span>Sign out</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <AuthModal open={authModalOpen} onOpenChange={setAuthModalOpen} />
         </header>
 
         <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-6">{children}</main>

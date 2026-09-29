@@ -1,18 +1,25 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   BadgeCheck,
   BarChart3,
   LineChart,
+  LogIn,
   Megaphone,
   Mic,
   ShieldCheck,
   Sparkles,
   Target,
+  UserCheck,
 } from "lucide-react";
 import { QPilotLogo } from "@/components/brand/QPilotLogo";
 import { SummitMark } from "@/components/brand/SummitMark";
 import { QUARTER_LABEL } from "@/data/mock";
+import { useAuth } from "@/lib/auth";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { Button } from "@/components/ui/button";
+import type { UserRole } from "@/types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -36,11 +43,24 @@ export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
-const consoles = [
+const consoles: Array<{
+  role: string;
+  roleKey: UserRole;
+  kicker: string;
+  to: "/dashboard" | "/marketing/dashboard" | "/sales/dashboard";
+  icon: typeof Target;
+  tone: string;
+  ring: string;
+  glow: string;
+  summary: string;
+  points: string[];
+  cta: string;
+}> = [
   {
     role: "Territory Manager",
+    roleKey: "TM",
     kicker: "Field practice",
-    to: "/dashboard" as const,
+    to: "/dashboard",
     icon: Target,
     tone: "bg-mint text-primary",
     ring: "group-hover:border-primary/60",
@@ -51,8 +71,9 @@ const consoles = [
   },
   {
     role: "Marketing Manager",
+    roleKey: "MM",
     kicker: "Brand control",
-    to: "/marketing/dashboard" as const,
+    to: "/marketing/dashboard",
     icon: Megaphone,
     tone: "bg-ai-soft text-ai",
     ring: "group-hover:border-ai/60",
@@ -63,8 +84,9 @@ const consoles = [
   },
   {
     role: "Sales Manager",
+    roleKey: "SM",
     kicker: "Team coaching",
-    to: "/sales/dashboard" as const,
+    to: "/sales/dashboard",
     icon: LineChart,
     tone: "bg-info-soft text-info",
     ring: "group-hover:border-info/60",
@@ -83,18 +105,30 @@ const capabilities = [
 ];
 
 function LandingPage() {
+  const { user, role, signInWithDemoRole, isAuthenticated } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   return (
     <div className="aurora-field min-h-screen overflow-hidden">
       <div className="grid-veil pointer-events-none absolute inset-x-0 top-0 h-[560px]" aria-hidden="true" />
 
       <header className="relative mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-5 py-6 sm:px-8">
         <QPilotLogo />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <span className="hidden rounded-xl border border-border/70 bg-card/70 px-3 py-2 text-xs font-bold text-navy backdrop-blur sm:block">
             {QUARTER_LABEL}
           </span>
+          <button
+            type="button"
+            onClick={() => setAuthModalOpen(true)}
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 text-xs font-bold text-navy backdrop-blur transition-colors hover:border-primary/40 hover:bg-card cursor-pointer"
+          >
+            <LogIn className="size-3.5 text-primary" />
+            <span>Sign In / Role</span>
+          </button>
           <Link
             to="/admin/dashboard"
+            onClick={() => signInWithDemoRole("ADMIN")}
             className="inline-flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card/70 px-3 text-xs font-bold text-navy backdrop-blur transition-colors hover:border-navy/30 hover:bg-card"
           >
             <ShieldCheck className="size-4" />
@@ -102,6 +136,8 @@ function LandingPage() {
           </Link>
         </div>
       </header>
+
+      <AuthModal open={authModalOpen} onOpenChange={setAuthModalOpen} />
 
       <main className="relative mx-auto w-full max-w-[1200px] px-5 pb-20 sm:px-8">
         <section className="animate-rise pt-8 text-center sm:pt-14">
@@ -126,6 +162,7 @@ function LandingPage() {
             <Link
               key={item.role}
               to={item.to}
+              onClick={() => signInWithDemoRole(item.roleKey)}
               style={{ animationDelay: `${120 + index * 90}ms` }}
               className={`glass-card lift-hover animate-rise group relative flex flex-col overflow-hidden p-6 hover:-translate-y-1.5 hover:shadow-[var(--shadow-card-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${item.ring}`}
             >
