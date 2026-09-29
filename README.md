@@ -9,7 +9,7 @@ mock data. Backend/AI services are intentionally out of scope for this phase.
 
 ---
 
-## Internship Documentation
+## Documentation
 
 This project was designed and built during my internship with Quantae AI.
 
