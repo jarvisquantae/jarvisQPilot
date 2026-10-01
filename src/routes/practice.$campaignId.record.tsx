@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   CheckCircle2,
@@ -47,6 +48,7 @@ export const Route = createFileRoute("/practice/$campaignId/record")({
 function RecordPracticePage() {
   const { campaignId } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
 
   const [state, setState] = useState<RecordingState>("idle");
@@ -226,6 +228,8 @@ function RecordPracticePage() {
         audioUrl: finalAudioUrl,
         audioBlob: recordedBlob ?? undefined,
       });
+
+      await queryClient.invalidateQueries();
 
       toast.success(
         isAiEvaluated
