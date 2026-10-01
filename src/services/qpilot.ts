@@ -344,12 +344,30 @@ export async function getPracticeAttempt(campaignId: string): Promise<PracticeAt
   return attempt ?? mock.latestAttempt;
 }
 
+const activeTranscripts: Record<string, Transcript> = {};
+const activeAssessments: Record<string, AssessmentResult> = {};
+
+export function updateActiveEvaluation(
+  campaignId: string,
+  transcript: Transcript,
+  assessment: AssessmentResult,
+) {
+  activeTranscripts[campaignId] = transcript;
+  activeAssessments[campaignId] = assessment;
+}
+
 export async function getTranscript(campaignId: string): Promise<Transcript> {
+  if (activeTranscripts[campaignId]) {
+    return activeTranscripts[campaignId];
+  }
   await delay(420);
   return mock.transcripts[campaignId] ?? mock.transcripts["cardiocare-a"]!;
 }
 
 export async function getAssessmentResult(campaignId: string): Promise<AssessmentResult> {
+  if (activeAssessments[campaignId]) {
+    return activeAssessments[campaignId];
+  }
   await delay(420);
   return mock.assessmentResults[campaignId] ?? mock.assessmentResults["cardiocare-a"]!;
 }

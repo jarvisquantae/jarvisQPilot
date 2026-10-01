@@ -217,15 +217,22 @@ function RecordPracticePage() {
         );
       }
 
-      await savePracticeAttempt({
+      toast.loading("Evaluating detailing with Gemini AI...", { id: "ai-eval" });
+      const { isAiEvaluated } = await savePracticeAttempt({
         campaignId,
         userId: user.id,
         mode: "guided",
         durationSeconds: seconds || 15,
         audioUrl: finalAudioUrl,
+        audioBlob: recordedBlob ?? undefined,
       });
 
-      toast.success("Assessment submitted! Analyzing detailing accuracy & adherence...");
+      toast.success(
+        isAiEvaluated
+          ? "Gemini 2.0 Flash evaluated detailing accuracy, adherence & rubric!"
+          : "Assessment submitted! Reviewing detailing rubric...",
+        { id: "ai-eval" },
+      );
       setTimeout(() => {
         navigate({ to: "/practice/$campaignId/transcript", params: { campaignId } });
       }, 700);
