@@ -16,6 +16,7 @@ export interface SaveAttemptParams {
   durationSeconds: number;
   audioUrl: string;
   audioBlob?: Blob;
+  spokenTranscript?: string;
 }
 
 export async function savePracticeAttempt({
@@ -25,6 +26,7 @@ export async function savePracticeAttempt({
   durationSeconds,
   audioUrl,
   audioBlob,
+  spokenTranscript,
 }: SaveAttemptParams): Promise<{
   attempt: PracticeAttempt;
   transcript: Transcript;
@@ -64,8 +66,8 @@ export async function savePracticeAttempt({
     readiness: "ready",
   };
 
-  // If audioBlob is supplied, attempt live Gemini 2.0 Flash evaluation
-  if (audioBlob) {
+  // Evaluate detailing audio using Gemini 2.0 Flash or local spoken speech engine
+  if (audioBlob || spokenTranscript) {
     try {
       const [campaign, pitch, rubric] = await Promise.all([
         getCampaign(campaignId).catch(() => undefined),
@@ -74,14 +76,15 @@ export async function savePracticeAttempt({
       ]);
 
       const aiResult = await evaluateWithGemini({
-        audioBlob,
+        audioBlob: audioBlob || new Blob([], { type: "audio/webm" }),
+        spokenTranscript,
         campaign,
         pitch,
         rubric,
       });
 
       if (aiResult) {
-        isAiEvaluated = true;
+        isAiEvaluated = aiResult.isAiGenerated;
         score = Math.round(aiResult.accuracy * 0.4 + aiResult.adherence * 0.35 + 24);
         rating = aiResult.rating;
         verdict = aiResult.verdict;

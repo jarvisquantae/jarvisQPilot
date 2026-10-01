@@ -3,6 +3,14 @@ import type { Transcript } from "@/types";
 import { cn } from "@/lib/utils";
 
 export function TranscriptPanel({ transcript }: { transcript: Transcript }) {
+  if (!transcript.turns || transcript.turns.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
+        No spoken speech recorded in this session.
+      </div>
+    );
+  }
+
   return (
     <ul className="space-y-3">
       {transcript.turns.map((turn) => {

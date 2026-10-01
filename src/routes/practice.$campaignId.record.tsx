@@ -12,16 +12,21 @@ import {
   Sparkles,
   Square,
   UploadCloud,
+  Key,
+  ShieldCheck,
+  Cpu,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { InputContextBar } from "@/components/tm/InputContextBar";
 import { Button } from "@/components/ui/button";
+import { AiConfigModal } from "@/components/practice/AiConfigModal";
 import { practiceContext } from "@/data/tm";
 import { formatClock } from "@/utils/format";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { uploadPracticeAudio } from "@/services/storage";
 import { savePracticeAttempt } from "@/services/practice";
+import { isGeminiConfigured } from "@/services/ai";
 import type { RecordingState } from "@/types";
 
 export const Route = createFileRoute("/practice/$campaignId/record")({
@@ -57,12 +62,16 @@ function RecordPracticePage() {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [geminiActive, setGeminiActive] = useState(isGeminiConfigured());
 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
 
   // Timer while recording
   useEffect(() => {
@@ -73,11 +82,18 @@ function RecordPracticePage() {
     };
   }, [state]);
 
-  // Clean up streams and players on unmount
+  // Clean up streams, recognition, and players on unmount
   useEffect(() => {
     return () => {
       if (audioStreamRef.current) {
         audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch {
+          // ignore
+        }
       }
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
@@ -99,6 +115,7 @@ function RecordPracticePage() {
         throw new Error("Microphone API not supported on this browser");
       }
 
+      setLiveTranscript("");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
       audioChunksRef.current = [];
@@ -130,14 +147,48 @@ function RecordPracticePage() {
 
       mediaRecorderRef.current = recorder;
       recorder.start(250);
+
+      // Start browser Web Speech Recognition for live verbatim text capture
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+      if (SpeechRecognition) {
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = "en-US";
+
+          let accumulated = "";
+          recognition.onresult = (event: any) => {
+            let currentInterim = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                accumulated += event.results[i][0].transcript + " ";
+              } else {
+                currentInterim += event.results[i][0].transcript;
+              }
+            }
+            setLiveTranscript((accumulated + currentInterim).trim());
+          };
+
+          recognition.onerror = (e: any) => {
+            console.warn("SpeechRecognition notice:", e.error);
+          };
+
+          recognition.start();
+          speechRecognitionRef.current = recognition;
+        } catch (recErr) {
+          console.warn("Could not start SpeechRecognition:", recErr);
+        }
+      }
+
       setState("recording");
       setSeconds(0);
       toast.info("Microphone connected — recording live detailing audio");
     } catch (err: any) {
-      console.warn("Microphone access unavailable, using simulated take:", err);
-      toast.warning("Microphone access unavailable — starting simulated recording take");
-      setState("recording");
-      setSeconds(0);
+      console.warn("Microphone access unavailable:", err);
+      toast.error("Could not access microphone: " + (err.message || "Permission denied"));
     }
   };
 
@@ -145,12 +196,20 @@ function RecordPracticePage() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      speechRecognitionRef.current = null;
+    }
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach((track) => track.stop());
       audioStreamRef.current = null;
     }
     setState("stopped");
-    toast.success("Recording complete! You can listen back or submit for scoring.");
+    toast.success("Recording complete! Review your speech below or submit for scoring.");
   };
 
   const toggleRecording = () => {
@@ -184,19 +243,26 @@ function RecordPracticePage() {
   const handleReset = () => {
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
-      audioPlayerRef.current = null;
     }
+    if (playbackUrl) {
+      URL.revokeObjectURL(playbackUrl);
+    }
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+    setRecordedBlob(null);
+    setPlaybackUrl(null);
     setIsPlaying(false);
     setState("idle");
     setSeconds(0);
-    setRecordedBlob(null);
-    if (playbackUrl) {
-      URL.revokeObjectURL(playbackUrl);
-      setPlaybackUrl(null);
-    }
+    setLiveTranscript("");
   };
 
-  const hasTake = state === "stopped";
+  const hasTake = state === "stopped" || recordedBlob !== null;
 
   const submit = async () => {
     setSubmitting(true);
@@ -213,13 +279,19 @@ function RecordPracticePage() {
         finalAudioUrl = uploadResult.url;
         toast.success(
           uploadResult.isFallback
-            ? "Practice take stored locally (connect Supabase bucket for cloud sync)"
+            ? "Practice audio stored locally"
             : "Practice audio successfully uploaded to Supabase Storage!",
           { id: "audio-upload" },
         );
       }
 
-      toast.loading("Evaluating detailing with Gemini AI...", { id: "ai-eval" });
+      toast.loading(
+        geminiActive
+          ? "Evaluating detailing with Gemini 2.0 Flash..."
+          : "Analyzing spoken speech against campaign rubric...",
+        { id: "ai-eval" },
+      );
+
       const { isAiEvaluated } = await savePracticeAttempt({
         campaignId,
         userId: user.id,
@@ -227,6 +299,7 @@ function RecordPracticePage() {
         durationSeconds: seconds || 15,
         audioUrl: finalAudioUrl,
         audioBlob: recordedBlob ?? undefined,
+        spokenTranscript: liveTranscript.trim() || undefined,
       });
 
       await queryClient.invalidateQueries();
@@ -234,7 +307,7 @@ function RecordPracticePage() {
       toast.success(
         isAiEvaluated
           ? "Gemini 2.0 Flash evaluated detailing accuracy, adherence & rubric!"
-          : "Assessment submitted! Reviewing detailing rubric...",
+          : "Detailing evaluated! Spoken transcript & rubric score ready.",
         { id: "ai-eval" },
       );
       setTimeout(() => {
@@ -255,14 +328,43 @@ function RecordPracticePage() {
           month={practiceContext.month}
           visit={practiceContext.visit}
         />
-        <header>
-          <p className="text-lg font-extrabold uppercase tracking-wide text-brand-red">
-            {practiceContext.brand}
-          </p>
-          <h1 className="mt-1 text-3xl font-extrabold text-navy sm:text-4xl">
-            {practiceContext.inputTitle}
-          </h1>
-          <p className="mt-1 text-base font-bold text-primary">Practice Your Detailing</p>
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p className="text-lg font-extrabold uppercase tracking-wide text-brand-red">
+              {practiceContext.brand}
+            </p>
+            <h1 className="mt-1 text-3xl font-extrabold text-navy sm:text-4xl">
+              {practiceContext.inputTitle}
+            </h1>
+            <p className="mt-1 text-base font-bold text-primary">Practice Your Detailing</p>
+          </div>
+
+          {/* AI Model Status & Configuration Pill */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsAiModalOpen(true)}
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-xs transition-colors cursor-pointer",
+                geminiActive
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100",
+              )}
+            >
+              {geminiActive ? (
+                <>
+                  <ShieldCheck className="size-3.5 text-emerald-600" />
+                  <span>Gemini 2.0 Flash Active</span>
+                </>
+              ) : (
+                <>
+                  <Cpu className="size-3.5 text-amber-600" />
+                  <span>Browser Speech-to-Text</span>
+                  <Key className="size-3 ml-1 text-amber-600" />
+                </>
+              )}
+            </button>
+          </div>
         </header>
 
         <div className="grid gap-5 lg:grid-cols-12">
@@ -357,6 +459,42 @@ function RecordPracticePage() {
             </Button>
           </div>
 
+          {/* Real-time live speech transcription preview */}
+          {state === "recording" && (
+            <div className="mt-6 rounded-2xl border border-primary/30 bg-mint/40 p-4 text-left">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary mb-1">
+                <span className="relative flex size-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex size-2.5 rounded-full bg-primary"></span>
+                </span>
+                <span>Live Speech Recognition (Listening to your detailing...)</span>
+              </div>
+              <p className="text-sm font-medium text-navy italic">
+                {liveTranscript ? `“${liveTranscript}”` : "Speak into your microphone now..."}
+              </p>
+            </div>
+          )}
+
+          {/* Captured spoken speech preview once stopped */}
+          {state === "stopped" && (
+            <div className="mt-6 rounded-2xl border border-border bg-surface-2 p-4 text-left">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1.5">
+                <span className="flex items-center gap-1.5 font-bold text-navy">
+                  <CheckCircle2 className="size-4 text-success" />
+                  Your Captured Detailing Audio & Speech
+                </span>
+                <span className="text-[11px] bg-white px-2 py-0.5 rounded border border-border">
+                  Ready for Assessment
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-navy font-medium bg-white/70 rounded-lg p-3 border border-border/50">
+                {liveTranscript
+                  ? `“${liveTranscript}”`
+                  : "Audio recording captured. Click Submit below to transcribe & assess."}
+              </p>
+            </div>
+          )}
+
           <div className="mt-6 border-t border-border pt-5">
             <p className="flex items-center justify-center gap-2 text-sm font-semibold text-primary">
               <Sparkles className="size-4" />
@@ -383,7 +521,7 @@ function RecordPracticePage() {
                 Record Again
               </Button>
               <Button
-                className="rounded-xl cursor-pointer"
+                className="rounded-xl cursor-pointer bg-navy hover:bg-navy/90 text-white"
                 disabled={!hasTake || submitting}
                 onClick={submit}
               >
@@ -392,15 +530,21 @@ function RecordPracticePage() {
                 ) : (
                   <Sparkles className="size-4" />
                 )}
-                {submitting ? "Uploading to Supabase..." : "Submit for AI Assessment"}
+                {submitting ? "Analyzing Audio..." : "Submit for AI Assessment"}
               </Button>
             </div>
             <p className="mt-3 text-center text-xs text-muted-foreground">
-              Live microphone recording connected. Submissions are saved to Supabase Storage and logged to the practice database.
+              Live microphone recording connected. Real speech transcription evaluates adherence to approved clinical claims.
             </p>
           </div>
         </section>
       </div>
+
+      <AiConfigModal
+        open={isAiModalOpen}
+        onOpenChange={setIsAiModalOpen}
+        onConfigChanged={() => setGeminiActive(isGeminiConfigured())}
+      />
     </AppShell>
   );
 }
