@@ -159,21 +159,21 @@ function RecordPracticePage() {
           recognition.interimResults = true;
           recognition.lang = "en-US";
 
-          let accumulated = "";
           recognition.onresult = (event: any) => {
-            let currentInterim = "";
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-              if (event.results[i].isFinal) {
-                accumulated += event.results[i][0].transcript + " ";
-              } else {
-                currentInterim += event.results[i][0].transcript;
-              }
+            let fullText = "";
+            for (let i = 0; i < event.results.length; ++i) {
+              fullText += event.results[i][0].transcript + " ";
             }
-            setLiveTranscript((accumulated + currentInterim).trim());
+            setLiveTranscript(fullText.trim());
           };
 
           recognition.onerror = (e: any) => {
             console.warn("SpeechRecognition notice:", e.error);
+            if (e.error === "not-allowed") {
+              toast.error("Microphone speech recognition permission blocked in browser settings.");
+            } else if (e.error === "network") {
+              toast.warning("Browser speech recognition network issue. You can type or use Gemini cloud AI.");
+            }
           };
 
           recognition.start();
@@ -481,17 +481,37 @@ function RecordPracticePage() {
               <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1.5">
                 <span className="flex items-center gap-1.5 font-bold text-navy">
                   <CheckCircle2 className="size-4 text-success" />
-                  Your Captured Detailing Audio & Speech
+                  Your Captured Detailing Speech
                 </span>
-                <span className="text-[11px] bg-white px-2 py-0.5 rounded border border-border">
-                  Ready for Assessment
+                <span className="text-[11px] bg-white px-2 py-0.5 rounded border border-border text-muted-foreground">
+                  Editable before submitting
                 </span>
               </div>
-              <p className="text-xs leading-relaxed text-navy font-medium bg-white/70 rounded-lg p-3 border border-border/50">
-                {liveTranscript
-                  ? `“${liveTranscript}”`
-                  : "Audio recording captured. Click Submit below to transcribe & assess."}
-              </p>
+              <textarea
+                value={liveTranscript}
+                onChange={(e) => setLiveTranscript(e.target.value)}
+                placeholder="Speech recognition was quiet or microphone was muted. Type, edit, or paste your detailing pitch here..."
+                rows={3}
+                className="w-full text-xs leading-relaxed text-navy font-medium bg-white rounded-lg p-3 border border-border/80 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary resize-y"
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <span className="text-muted-foreground">
+                  {liveTranscript.trim().length > 0
+                    ? `${liveTranscript.trim().split(/\s+/).filter(Boolean).length} words ready for AI evaluation`
+                    : "Tip: Type your pitch above or click the sample pitch button."}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLiveTranscript(
+                      "Good morning Dr. Sharma, thank you for your time today. I would like to introduce CardioCare A for your uncontrolled hypertension patients. Clinical trials show consistent 24-hour BP reduction with convenient once-daily morning dosing and an exceptional safety profile. May I provide starter sample packs for your clinic this week?"
+                    )
+                  }
+                  className="text-primary hover:underline font-semibold cursor-pointer"
+                >
+                  Fill with sample detailing pitch
+                </button>
+              </div>
             </div>
           )}
 
