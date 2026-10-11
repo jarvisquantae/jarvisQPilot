@@ -324,8 +324,43 @@ export async function getRubric(campaignId: string): Promise<AssessmentRubric> {
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  await delay();
-  return mock.dashboardMetrics;
+  if (isMockFallbackEnabled()) {
+    await delay();
+    return mock.dashboardMetrics;
+  }
+
+  try {
+    const [campaignsRes, attemptsRes, inputsRes] = await Promise.all([
+      supabase.from("campaigns").select("readiness_score"),
+      supabase.from("practice_attempts").select("id", { count: "exact" }),
+      supabase.from("promotional_inputs").select("status"),
+    ]);
+
+    const campaigns = campaignsRes.data || [];
+    const inputs = inputsRes.data || [];
+    const completedAttemptsCount = attemptsRes.count ?? 0;
+
+    if (campaigns.length === 0) {
+      return mock.dashboardMetrics;
+    }
+
+    const avgReadiness = Math.round(
+      campaigns.reduce((acc, c: any) => acc + (c.readiness_score || 0), 0) / campaigns.length,
+    );
+    const completedInputs = inputs.filter((inp: any) => inp.status === "completed").length;
+
+    return {
+      readinessScore: avgReadiness || mock.dashboardMetrics.readinessScore,
+      deltaPercent: 6,
+      completedInputs: completedInputs || mock.dashboardMetrics.completedInputs,
+      totalInputs: inputs.length || mock.dashboardMetrics.totalInputs,
+      activePractices: Math.max(1, completedAttemptsCount),
+      scheduledPractices: 3,
+    };
+  } catch (err) {
+    console.warn("Supabase getDashboardMetrics failed, using mock:", err);
+    return mock.dashboardMetrics;
+  }
 }
 
 export async function getAiSuggestions(): Promise<AiSuggestion[]> {
@@ -339,9 +374,43 @@ export async function getNextActions(): Promise<string[]> {
 }
 
 export async function getPracticeAttempt(campaignId: string): Promise<PracticeAttempt> {
-  await delay();
-  const attempt = mock.progress.history.find((item) => item.campaignId === campaignId);
-  return attempt ?? mock.latestAttempt;
+  if (isMockFallbackEnabled()) {
+    await delay();
+    const attempt = mock.progress.history.find((item) => item.campaignId === campaignId);
+    return attempt ?? mock.latestAttempt;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("practice_attempts")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      const fallback = mock.progress.history.find((item) => item.campaignId === campaignId);
+      return fallback ?? mock.latestAttempt;
+    }
+
+    return {
+      id: data.id,
+      campaignId: data.campaign_id,
+      userId: data.user_id ?? "tm-user",
+      mode: data.mode as "guided" | "full",
+      date: data.date,
+      score: data.score,
+      rating: Number(data.rating),
+      verdict: data.verdict ?? "Practice detailing attempt",
+      durationSeconds: data.duration_seconds,
+      audioUrl: data.audio_url,
+    };
+  } catch (err) {
+    console.warn(`Supabase getPracticeAttempt(${campaignId}) failed, using fallback:`, err);
+    const fallback = mock.progress.history.find((item) => item.campaignId === campaignId);
+    return fallback ?? mock.latestAttempt;
+  }
 }
 
 const activeTranscripts: Record<string, Transcript> = {};
@@ -360,21 +429,153 @@ export async function getTranscript(campaignId: string): Promise<Transcript> {
   if (activeTranscripts[campaignId]) {
     return activeTranscripts[campaignId];
   }
-  await delay(420);
-  return mock.transcripts[campaignId] ?? mock.transcripts["cardiocare-a"]!;
+
+  if (isMockFallbackEnabled()) {
+    await delay(200);
+    return mock.transcripts[campaignId] ?? mock.transcripts["cardiocare-a"]!;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("transcripts")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return mock.transcripts[campaignId] ?? mock.transcripts["cardiocare-a"]!;
+    }
+
+    return {
+      id: data.id,
+      attemptId: data.attempt_id,
+      campaignId: data.campaign_id,
+      submittedAt: data.submitted_at || new Date(data.created_at).toISOString(),
+      status: data.status,
+      turns: data.turns ?? [],
+      vocabularyMapping: data.vocabulary_mapping ?? [],
+      corrections: data.corrections ?? [],
+    };
+  } catch (err) {
+    console.warn(`Supabase getTranscript(${campaignId}) failed, using fallback:`, err);
+    return mock.transcripts[campaignId] ?? mock.transcripts["cardiocare-a"]!;
+  }
 }
 
 export async function getAssessmentResult(campaignId: string): Promise<AssessmentResult> {
   if (activeAssessments[campaignId]) {
     return activeAssessments[campaignId];
   }
-  await delay(420);
-  return mock.assessmentResults[campaignId] ?? mock.assessmentResults["cardiocare-a"]!;
+
+  if (isMockFallbackEnabled()) {
+    await delay(200);
+    return mock.assessmentResults[campaignId] ?? mock.assessmentResults["cardiocare-a"]!;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("assessment_results")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return mock.assessmentResults[campaignId] ?? mock.assessmentResults["cardiocare-a"]!;
+    }
+
+    return {
+      id: data.id,
+      attemptId: data.attempt_id,
+      campaignId: data.campaign_id,
+      accuracy: data.accuracy,
+      adherence: data.adherence,
+      rating: Number(data.rating),
+      readiness: data.readiness,
+      calculatedBy: data.calculated_by || "application",
+      positives: data.positives ?? [],
+      improvements: data.improvements ?? [],
+      coverage: data.coverage ?? [],
+      requiresHumanReview: Boolean(data.requires_human_review),
+    };
+  } catch (err) {
+    console.warn(`Supabase getAssessmentResult(${campaignId}) failed, using fallback:`, err);
+    return mock.assessmentResults[campaignId] ?? mock.assessmentResults["cardiocare-a"]!;
+  }
 }
 
 export async function getProgress(): Promise<Progress> {
-  await delay();
-  return mock.progress;
+  if (isMockFallbackEnabled()) {
+    await delay();
+    return mock.progress;
+  }
+
+  try {
+    const [attemptsRes, campaignsRes] = await Promise.all([
+      supabase
+        .from("practice_attempts")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("campaigns")
+        .select("id, product_name, readiness_score, readiness"),
+    ]);
+
+    const attemptsData = attemptsRes.data || [];
+    const campaignsData = campaignsRes.data || [];
+
+    if (attemptsData.length === 0) {
+      return mock.progress;
+    }
+
+    const history: PracticeAttempt[] = attemptsData.map((att: any) => ({
+      id: att.id,
+      campaignId: att.campaign_id,
+      userId: att.user_id ?? "tm-user",
+      mode: att.mode as "guided" | "full",
+      date: att.date,
+      score: att.score,
+      rating: Number(att.rating),
+      verdict: att.verdict ?? "Practice attempt",
+      durationSeconds: att.duration_seconds,
+      audioUrl: att.audio_url,
+    }));
+
+    // Build chronological score trend for chart (oldest to newest)
+    const chronological = [...history].reverse();
+    const scoreTrend = chronological.map((att, idx) => ({
+      label: att.date ? att.date.split(" ").slice(0, 2).join(" ") : `Attempt ${idx + 1}`,
+      score: att.score,
+    }));
+
+    // Calculate improvement delta
+    const firstScore = chronological[0]?.score ?? 80;
+    const latestScore = chronological[chronological.length - 1]?.score ?? firstScore;
+    const improvementDelta = latestScore - firstScore;
+
+    // Map readiness by campaign from real campaign table
+    const readinessByCampaign = campaignsData.map((c: any) => ({
+      campaignId: c.id,
+      name: c.product_name,
+      score: c.readiness_score,
+      readiness: c.readiness,
+    }));
+
+    return {
+      scoreTrend: scoreTrend.length > 0 ? scoreTrend : mock.progress.scoreTrend,
+      improvementDelta: scoreTrend.length > 1 ? improvementDelta : mock.progress.improvementDelta,
+      readinessByCampaign: readinessByCampaign.length > 0 ? readinessByCampaign : mock.progress.readinessByCampaign,
+      history,
+      coachNotes: mock.progress.coachNotes,
+    };
+  } catch (err) {
+    console.warn("Supabase getProgress failed, using fallback:", err);
+    return mock.progress;
+  }
 }
 
 export async function getNotifications(): Promise<AppNotification[]> {
