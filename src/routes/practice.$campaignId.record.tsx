@@ -220,19 +220,7 @@ function RecordPracticePage() {
       audioStreamRef.current = null;
     }
     setState("stopped");
-
-    // If browser speech recognition was silent or hit a network error, automatically pre-fill
-    // the approved detailing pitch so the rep always has text ready to review and submit
-    setTimeout(() => {
-      setLiveTranscript((prev) => {
-        if (!prev || prev.trim().length === 0) {
-          return "Good morning Dr. Sharma, thank you for your time today. I would like to introduce CardioCare A for your uncontrolled hypertension patients. Clinical trials show consistent 24-hour BP reduction with convenient once-daily morning dosing and an exceptional safety profile. May I provide starter sample packs for your clinic this week?";
-        }
-        return prev;
-      });
-    }, 250);
-
-    toast.success("Recording complete! You can listen back or review your detailing speech below.");
+    toast.success("Recording complete! You can listen back or review your speech below.");
   };
 
   const toggleRecording = () => {
