@@ -350,39 +350,55 @@ Return ONLY a valid JSON object matching this schema:
 }
 `;
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    const models = ["gemini-3.5-flash", "gemini-3.8-flash"];
+    let response: Response | null = null;
+    let lastError = "";
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
+    for (const model of models) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [
               {
-                inlineData: {
-                  mimeType,
-                  data: base64Audio,
-                },
-              },
-              {
-                text: prompt,
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType,
+                      data: base64Audio,
+                    },
+                  },
+                  {
+                    text: prompt,
+                  },
+                ],
               },
             ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
-        },
-      }),
-    });
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+            },
+          }),
+        });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn("Gemini API call returned non-200:", response.status, errText);
+        if (res.ok) {
+          response = res;
+          break;
+        } else {
+          lastError = await res.text();
+          console.warn(`Gemini model ${model} returned ${res.status}:`, lastError);
+        }
+      } catch (err: any) {
+        lastError = err?.message || "fetch error";
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.warn("All Gemini models failed, falling back to local rubric engine:", lastError);
       return evaluateSpokenTranscriptLocal({
         spokenTranscript: spokenTranscript || "",
         campaign,
