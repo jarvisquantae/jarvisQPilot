@@ -305,12 +305,9 @@ function RecordPracticePage() {
         );
       }
 
-      toast.loading(
-        geminiActive
-          ? "Evaluating detailing with Gemini 2.0 Flash..."
-          : "Analyzing spoken speech against campaign rubric...",
-        { id: "ai-eval" },
-      );
+      toast.loading("Analyzing detailing audio against campaign rubric...", {
+        id: "ai-eval",
+      });
 
       const { isAiEvaluated } = await savePracticeAttempt({
         campaignId,
