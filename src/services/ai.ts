@@ -18,6 +18,7 @@ export interface GeminiAssessmentResult {
   positives: Feedback[];
   improvements: Feedback[];
   coverage: CoverageCheck[];
+  vocabularyMapping?: Array<{ spoken: string; approved: string; matched: boolean }>;
   isAiGenerated: boolean;
 }
 
@@ -283,9 +284,21 @@ export async function evaluateWithGemini({
     });
   }
 
+  // Handle empty audio recordings
+  if (!audioBlob || audioBlob.size < 100) {
+    console.info("Audio recording is empty or under 100 bytes, using local speech baseline");
+    return evaluateSpokenTranscriptLocal({
+      spokenTranscript: spokenTranscript || "",
+      campaign,
+      pitch,
+      rubric,
+    });
+  }
+
   try {
     const base64Audio = await blobToBase64(audioBlob);
-    const mimeType = audioBlob.type || "audio/webm";
+    // Sanitize MIME type (strip parameters like codecs=opus which cause 400 Bad Request on Gemini)
+    const mimeType = (audioBlob.type || "audio/webm").split(";")[0].trim() || "audio/webm";
 
     const prompt = `
 You are the Quantae AI Detailing Assessment Engine for Pharmaceutical Field Intelligence.
@@ -314,43 +327,50 @@ EVALUATION RUBRIC & RULES:
     }
 - Scoring Weights: Accuracy (40%), Adherence to Structure (35%), Mandatory Messages (25%).
 
-${spokenTranscript ? `(Browser speech context hint: "${spokenTranscript}")` : ""}
+${spokenTranscript ? `(Reference context: "${spokenTranscript}")` : ""}
 
 TASK:
 1. Listen carefully to the representative's speech in the attached audio.
-2. Transcribe verbatim what the representative said. Split by speaker turns (rep is "tm", if any doctor reply use "hcp").
-3. Score Accuracy (0-100) based on correct medical facts without prohibited claims.
-4. Score Adherence (0-100) based on following opening, core messages, and asking for commitment.
+2. Transcribe verbatim what the representative actually said.
+   - If only the representative spoke, output a single turn with speaker "tm" and speakerLabel "Territory Manager (You)" containing their exact spoken words.
+   - DO NOT fabricate, invent, or hallucinate a simulated conversation or doctor reply if the audio only contains the representative's voice.
+   - If no speech or only silence/background noise is heard, transcribe text as "[No clear speech detected in recording. Please check microphone and repeat your pitch.]" and give lower scores (e.g. accuracy: 35, adherence: 35).
+3. Score Accuracy (0-100) based on correct medical facts and absence of prohibited claims.
+4. Score Adherence (0-100) based on whether they followed detailing structure (greeting, core clinical claims, commitment ask).
 5. Overall rating (1.0 to 5.0 scale).
 6. Set readiness to "ready" (if average >= 85), "on_track" (70-84), or "needs_focus" (<70).
-7. Generate 2-3 specific positives and 2-3 specific constructive improvement areas based on what they actually said.
-8. Check coverage of key sections.
+7. Generate 2 specific positives and 2 specific constructive improvement areas referencing what was actually spoken.
+8. Check coverage of key sections ("covered", "partial", or "missing").
+9. Extract vocabulary mapping for approved medical terms mentioned.
 
 Return ONLY a valid JSON object matching this schema:
 {
   "transcript": [
     { "speaker": "tm", "speakerLabel": "Territory Manager (You)", "text": "verbatim speech here" }
   ],
-  "accuracy": 92,
-  "adherence": 89,
-  "rating": 4.7,
+  "accuracy": 90,
+  "adherence": 88,
+  "rating": 4.5,
   "readiness": "ready",
   "verdict": "Clear, compliant detailing with strong guideline focus",
   "positives": [
-    { "id": "pos-1", "title": "Strong Opening Hook", "detail": "Addressed Dr. warmly and linked to AHA guideline update", "kind": "positive" }
+    { "id": "pos-1", "title": "Strong Opening Hook", "detail": "Addressed Dr. warmly and stated detailing purpose clearly.", "kind": "positive" }
   ],
   "improvements": [
-    { "id": "imp-1", "title": "Pause for HCP Agreement", "detail": "Pause after mentioning once-daily dosing to confirm tolerance", "kind": "improvement" }
+    { "id": "imp-1", "title": "Reinforce Commitment Ask", "detail": "Ask specifically to evaluate trial packs for new patients.", "kind": "improvement" }
   ],
   "coverage": [
     { "id": "cov-1", "label": "Opening Greeting & Rapport", "state": "covered" },
     { "id": "cov-2", "label": "Core Clinical Claims", "state": "covered" },
     { "id": "cov-3", "label": "Specific Commitment Ask", "state": "covered" }
+  ],
+  "vocabularyMapping": [
+    { "spoken": "blood pressure", "approved": "Consistent BP reduction", "matched": true }
   ]
 }
 `;
 
-    const models = ["gemini-3.5-flash", "gemini-3.8-flash"];
+    const models = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
     let response: Response | null = null;
     let lastError = "";
 
@@ -419,7 +439,19 @@ Return ONLY a valid JSON object matching this schema:
       });
     }
 
-    const parsed = JSON.parse(candidateText);
+    let parsed: any;
+    try {
+      const cleanJson = candidateText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+      parsed = JSON.parse(cleanJson);
+    } catch (parseErr) {
+      console.warn("Direct JSON.parse failed, extracting with regex:", parseErr);
+      const match = candidateText.match(/\{[\s\S]*\}/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      } else {
+        throw parseErr;
+      }
+    }
 
     return {
       transcript: Array.isArray(parsed.transcript) && parsed.transcript.length > 0
@@ -439,6 +471,7 @@ Return ONLY a valid JSON object matching this schema:
       positives: Array.isArray(parsed.positives) ? parsed.positives : [],
       improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
       coverage: Array.isArray(parsed.coverage) ? parsed.coverage : [],
+      vocabularyMapping: Array.isArray(parsed.vocabularyMapping) ? parsed.vocabularyMapping : undefined,
       isAiGenerated: true,
     };
   } catch (error) {

@@ -57,14 +57,12 @@ function RecordPracticePage() {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [liveTranscript, setLiveTranscript] = useState("");
 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
-  const speechRecognitionRef = useRef<any>(null);
   const playbackUrlRef = useRef<string | null>(null);
 
   // Timer while recording
@@ -76,18 +74,11 @@ function RecordPracticePage() {
     };
   }, [state]);
 
-  // Clean up streams, recognition, and players only on unmount
+  // Clean up streams and players only on unmount
   useEffect(() => {
     return () => {
       if (audioStreamRef.current) {
         audioStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      if (speechRecognitionRef.current) {
-        try {
-          speechRecognitionRef.current.stop();
-        } catch {
-          // ignore
-        }
       }
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
@@ -110,7 +101,6 @@ function RecordPracticePage() {
         throw new Error("Microphone API not supported on this browser");
       }
 
-      setLiveTranscript("");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
       audioChunksRef.current = [];
@@ -152,41 +142,6 @@ function RecordPracticePage() {
       mediaRecorderRef.current = recorder;
       recorder.start(250);
 
-      // Start browser Web Speech Recognition for live verbatim text capture
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-      if (SpeechRecognition) {
-        try {
-          const recognition = new SpeechRecognition();
-          recognition.continuous = true;
-          recognition.interimResults = true;
-          recognition.lang = "en-US";
-
-          recognition.onresult = (event: any) => {
-            let fullText = "";
-            for (let i = 0; i < event.results.length; ++i) {
-              fullText += event.results[i][0].transcript + " ";
-            }
-            setLiveTranscript(fullText.trim());
-          };
-
-          recognition.onerror = (e: any) => {
-            console.warn("SpeechRecognition notice:", e.error);
-            if (e.error === "not-allowed") {
-              toast.error("Microphone speech recognition permission blocked in browser settings.");
-            } else if (e.error === "network") {
-              toast.warning("Browser speech recognition network issue. You can type or use Gemini cloud AI.");
-            }
-          };
-
-          recognition.start();
-          speechRecognitionRef.current = recognition;
-        } catch (recErr) {
-          console.warn("Could not start SpeechRecognition:", recErr);
-        }
-      }
-
       setState("recording");
       setSeconds(0);
       toast.info("Microphone connected — recording live detailing audio");
@@ -199,14 +154,6 @@ function RecordPracticePage() {
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
-    }
-    if (speechRecognitionRef.current) {
-      try {
-        speechRecognitionRef.current.stop();
-      } catch {
-        // ignore
-      }
-      speechRecognitionRef.current = null;
     }
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -267,19 +214,11 @@ function RecordPracticePage() {
       URL.revokeObjectURL(playbackUrlRef.current);
       playbackUrlRef.current = null;
     }
-    if (speechRecognitionRef.current) {
-      try {
-        speechRecognitionRef.current.stop();
-      } catch {
-        // ignore
-      }
-    }
     setRecordedBlob(null);
     setPlaybackUrl(null);
     setIsPlaying(false);
     setState("idle");
     setSeconds(0);
-    setLiveTranscript("");
   };
 
   const hasTake = state === "stopped" || recordedBlob !== null;
@@ -316,7 +255,6 @@ function RecordPracticePage() {
         durationSeconds: seconds || 15,
         audioUrl: finalAudioUrl,
         audioBlob: recordedBlob ?? undefined,
-        spokenTranscript: liveTranscript.trim() || undefined,
       });
 
       await queryClient.invalidateQueries();

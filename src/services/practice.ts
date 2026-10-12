@@ -41,29 +41,47 @@ export async function savePracticeAttempt({
     year: "numeric",
   });
 
-  let score = 92;
-  let rating = 4.8;
-  let verdict = "Strong Detailing — Ready for HCP Interactions";
+  let score = 80;
+  let rating = 4.0;
+  let verdict = "Detailing Practice Completed";
   let isAiEvaluated = false;
 
   const baseTranscript: Transcript = {
-    ...(mock.transcripts[campaignId] || mock.transcripts["cardiocare-a"]!),
     id: `trn-${Date.now()}`,
     attemptId,
     campaignId,
-    submittedAt: now.toISOString(),
+    submittedAt: now.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
     status: "complete",
+    turns: [
+      {
+        id: "turn-1",
+        speaker: "tm",
+        speakerLabel: "Territory Manager (You)",
+        text: "Detailing audio recording submitted for assessment.",
+      },
+    ],
+    vocabularyMapping: [],
+    corrections: [],
   };
 
   const baseAssessment: AssessmentResult = {
-    ...(mock.assessmentResults[campaignId] || mock.assessmentResults["cardiocare-a"]!),
     id: `asr-${Date.now()}`,
     attemptId,
     campaignId,
-    accuracy: 94,
-    adherence: 91,
-    rating: 4.8,
-    readiness: "ready",
+    accuracy: 80,
+    adherence: 80,
+    rating: 4.0,
+    readiness: "on_track",
+    calculatedBy: "application",
+    positives: [],
+    improvements: [],
+    coverage: [],
   };
 
   // Evaluate detailing audio using Gemini 2.0 Flash or local spoken speech engine
@@ -85,7 +103,7 @@ export async function savePracticeAttempt({
 
       if (aiResult) {
         isAiEvaluated = aiResult.isAiGenerated;
-        score = Math.round(aiResult.accuracy * 0.4 + aiResult.adherence * 0.35 + 24);
+        score = Math.round(aiResult.accuracy * 0.5 + aiResult.adherence * 0.5);
         rating = aiResult.rating;
         verdict = aiResult.verdict;
 
@@ -98,19 +116,17 @@ export async function savePracticeAttempt({
           }));
         }
 
+        if (aiResult.vocabularyMapping && aiResult.vocabularyMapping.length > 0) {
+          baseTranscript.vocabularyMapping = aiResult.vocabularyMapping;
+        }
+
         baseAssessment.accuracy = aiResult.accuracy;
         baseAssessment.adherence = aiResult.adherence;
         baseAssessment.rating = aiResult.rating;
         baseAssessment.readiness = aiResult.readiness;
-        if (aiResult.positives && aiResult.positives.length > 0) {
-          baseAssessment.positives = aiResult.positives;
-        }
-        if (aiResult.improvements && aiResult.improvements.length > 0) {
-          baseAssessment.improvements = aiResult.improvements;
-        }
-        if (aiResult.coverage && aiResult.coverage.length > 0) {
-          baseAssessment.coverage = aiResult.coverage;
-        }
+        baseAssessment.positives = aiResult.positives || [];
+        baseAssessment.improvements = aiResult.improvements || [];
+        baseAssessment.coverage = aiResult.coverage || [];
       }
     } catch (aiErr) {
       console.warn("AI evaluation error, fell back to baseline scoring:", aiErr);

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle2,
@@ -11,8 +12,10 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { InputContextBar } from "@/components/tm/InputContextBar";
 import { Button } from "@/components/ui/button";
-import { practiceContext, practiceResult } from "@/data/tm";
+import { PageSkeleton } from "@/components/common/EmptyState";
+import { practiceContext } from "@/data/tm";
 import { cn } from "@/lib/utils";
+import { assessmentQuery, attemptQuery, campaignQuery } from "@/services/queries";
 
 export const Route = createFileRoute("/results/$campaignId/latest")({
   head: () => ({
@@ -32,6 +35,16 @@ export const Route = createFileRoute("/results/$campaignId/latest")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+  loader: ({ context, params }) => {
+    context.queryClient.ensureQueryData(campaignQuery(params.campaignId));
+    context.queryClient.ensureQueryData(assessmentQuery(params.campaignId));
+    context.queryClient.ensureQueryData(attemptQuery(params.campaignId));
+  },
+  pendingComponent: () => (
+    <AppShell>
+      <PageSkeleton />
+    </AppShell>
+  ),
   component: AssessmentPage,
 });
 
@@ -67,12 +80,42 @@ function ScoreRow({
 
 function AssessmentPage() {
   const { campaignId } = Route.useParams();
+  const { data: campaign } = useSuspenseQuery(campaignQuery(campaignId));
+  const { data: assessment } = useSuspenseQuery(assessmentQuery(campaignId));
+  const { data: attempt } = useSuspenseQuery(attemptQuery(campaignId));
+
+  const accuracy = assessment?.accuracy ?? 80;
+  const adherence = assessment?.adherence ?? 80;
+  const overall = attempt?.score ?? Math.round(accuracy * 0.5 + adherence * 0.5);
+
+  const readinessLabel =
+    assessment?.readiness === "ready"
+      ? "Ready for HCPs"
+      : assessment?.readiness === "on_track"
+      ? "Nearly Ready"
+      : "Needs Practice";
+
+  const didWellText =
+    assessment?.positives && assessment.positives.length > 0
+      ? assessment.positives.map((p) => p.detail).join(" ")
+      : "You clearly articulated key messaging and engaged with professional call structure.";
+
+  const improveNextText =
+    assessment?.improvements && assessment.improvements.length > 0
+      ? assessment.improvements.map((i) => i.detail).join(" ")
+      : "Reinforce specific dosage convenience and close with a definitive commitment ask.";
+
+  const encouragementText =
+    attempt?.verdict ||
+    (overall >= 85
+      ? "Outstanding detailing performance — approved for HCP discussions!"
+      : "Good progress — one more practice can make you ready.");
 
   return (
     <AppShell>
       <div className="space-y-6">
         <InputContextBar
-          inputName={practiceContext.inputTitle}
+          inputName={campaign?.title || practiceContext.inputTitle}
           month={practiceContext.month}
           visit={practiceContext.visit}
         />
@@ -83,12 +126,12 @@ function AssessmentPage() {
             </span>
             <div>
               <p className="text-lg font-extrabold uppercase tracking-wide text-primary">
-                {practiceContext.brand}
+                {campaign?.productName || practiceContext.brand}
               </p>
               <h1 className="mt-1 text-3xl font-extrabold text-navy">
-                {practiceContext.inputTitle}
+                {campaign?.title || practiceContext.inputTitle}
               </h1>
-              <p className="mt-1 text-base text-muted-foreground">Practice Your Detailing</p>
+              <p className="mt-1 text-base text-muted-foreground">Detailing AI Assessment Result</p>
             </div>
           </div>
 
@@ -112,19 +155,19 @@ function AssessmentPage() {
         <div className="grid gap-5 lg:grid-cols-2">
           <section className="card-surface p-6">
             <h2 className="text-lg font-extrabold uppercase tracking-wide text-primary">
-              Your Result
+              Your AI Assessment
             </h2>
             <div className="mt-5 space-y-2">
-              <ScoreRow icon={<Target className="size-5" />} label="Accuracy" value={practiceResult.accuracy} />
+              <ScoreRow icon={<Target className="size-5" />} label="Accuracy" value={accuracy} />
               <ScoreRow
                 icon={<ShieldCheck className="size-5" />}
                 label="Adherence"
-                value={practiceResult.adherence}
+                value={adherence}
               />
               <ScoreRow
                 icon={<Star className="size-5" />}
                 label="Overall"
-                value={practiceResult.overall}
+                value={overall}
                 highlight
               />
             </div>
@@ -135,7 +178,7 @@ function AssessmentPage() {
               </p>
               <span className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-bold text-primary">
                 <span className="size-2 rounded-full bg-primary" />
-                {practiceResult.readiness}
+                {readinessLabel}
               </span>
             </div>
           </section>
@@ -147,7 +190,7 @@ function AssessmentPage() {
                 What You Did Well
               </p>
               <p className="mt-3 text-base italic leading-relaxed text-navy">
-                “{practiceResult.didWell}”
+                “{didWellText}”
               </p>
             </section>
 
@@ -157,7 +200,7 @@ function AssessmentPage() {
                 Improve Next
               </p>
               <p className="mt-3 text-base italic leading-relaxed text-navy">
-                “{practiceResult.improveNext}”
+                “{improveNextText}”
               </p>
             </section>
           </div>
@@ -166,7 +209,7 @@ function AssessmentPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="flex items-center gap-3 text-sm italic text-navy">
             <CheckCircle2 className="size-6 text-primary" />
-            {practiceResult.encouragement}
+            {encouragementText}
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline" className="rounded-xl border-primary/40 text-primary">
