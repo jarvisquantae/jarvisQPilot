@@ -12,21 +12,16 @@ import {
   Sparkles,
   Square,
   UploadCloud,
-  Key,
-  ShieldCheck,
-  Cpu,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { InputContextBar } from "@/components/tm/InputContextBar";
 import { Button } from "@/components/ui/button";
-import { AiConfigModal } from "@/components/practice/AiConfigModal";
 import { practiceContext } from "@/data/tm";
 import { formatClock } from "@/utils/format";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { uploadPracticeAudio } from "@/services/storage";
 import { savePracticeAttempt } from "@/services/practice";
-import { isGeminiConfigured } from "@/services/ai";
 import type { RecordingState } from "@/types";
 
 export const Route = createFileRoute("/practice/$campaignId/record")({
@@ -63,8 +58,6 @@ function RecordPracticePage() {
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [geminiActive, setGeminiActive] = useState(isGeminiConfigured());
 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -331,12 +324,9 @@ function RecordPracticePage() {
 
       await queryClient.invalidateQueries();
 
-      toast.success(
-        isAiEvaluated
-          ? "Gemini 2.0 Flash evaluated detailing accuracy, adherence & rubric!"
-          : "Detailing evaluated! Spoken transcript & rubric score ready.",
-        { id: "ai-eval" },
-      );
+      toast.success("Detailing submitted! AI evaluated accuracy & adherence.", {
+        id: "ai-eval",
+      });
       setTimeout(() => {
         navigate({ to: "/practice/$campaignId/transcript", params: { campaignId } });
       }, 700);
@@ -355,43 +345,14 @@ function RecordPracticePage() {
           month={practiceContext.month}
           visit={practiceContext.visit}
         />
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <p className="text-lg font-extrabold uppercase tracking-wide text-brand-red">
-              {practiceContext.brand}
-            </p>
-            <h1 className="mt-1 text-3xl font-extrabold text-navy sm:text-4xl">
-              {practiceContext.inputTitle}
-            </h1>
-            <p className="mt-1 text-base font-bold text-primary">Practice Your Detailing</p>
-          </div>
-
-          {/* AI Model Status & Configuration Pill */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsAiModalOpen(true)}
-              className={cn(
-                "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-xs transition-colors cursor-pointer",
-                geminiActive
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                  : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100",
-              )}
-            >
-              {geminiActive ? (
-                <>
-                  <ShieldCheck className="size-3.5 text-emerald-600" />
-                  <span>Gemini 2.0 Flash Active</span>
-                </>
-              ) : (
-                <>
-                  <Cpu className="size-3.5 text-amber-600" />
-                  <span>Browser Speech-to-Text</span>
-                  <Key className="size-3 ml-1 text-amber-600" />
-                </>
-              )}
-            </button>
-          </div>
+        <header>
+          <p className="text-lg font-extrabold uppercase tracking-wide text-brand-red">
+            {practiceContext.brand}
+          </p>
+          <h1 className="mt-1 text-3xl font-extrabold text-navy sm:text-4xl">
+            {practiceContext.inputTitle}
+          </h1>
+          <p className="mt-1 text-base font-bold text-primary">Practice Your Detailing</p>
         </header>
 
         <div className="grid gap-5 lg:grid-cols-12">
@@ -486,62 +447,6 @@ function RecordPracticePage() {
             </Button>
           </div>
 
-          {/* Real-time live speech transcription preview */}
-          {state === "recording" && (
-            <div className="mt-6 rounded-2xl border border-primary/30 bg-mint/40 p-4 text-left">
-              <div className="flex items-center gap-2 text-xs font-bold text-primary mb-1">
-                <span className="relative flex size-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
-                  <span className="relative inline-flex size-2.5 rounded-full bg-primary"></span>
-                </span>
-                <span>Live Speech Recognition (Listening to your detailing...)</span>
-              </div>
-              <p className="text-sm font-medium text-navy italic">
-                {liveTranscript ? `“${liveTranscript}”` : "Speak into your microphone now..."}
-              </p>
-            </div>
-          )}
-
-          {/* Captured spoken speech preview once stopped */}
-          {state === "stopped" && (
-            <div className="mt-6 rounded-2xl border border-border bg-surface-2 p-4 text-left">
-              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1.5">
-                <span className="flex items-center gap-1.5 font-bold text-navy">
-                  <CheckCircle2 className="size-4 text-success" />
-                  Your Captured Detailing Speech
-                </span>
-                <span className="text-[11px] bg-white px-2 py-0.5 rounded border border-border text-muted-foreground">
-                  Editable before submitting
-                </span>
-              </div>
-              <textarea
-                value={liveTranscript}
-                onChange={(e) => setLiveTranscript(e.target.value)}
-                placeholder="Speech recognition was quiet or microphone was muted. Type, edit, or paste your detailing pitch here..."
-                rows={3}
-                className="w-full text-xs leading-relaxed text-navy font-medium bg-white rounded-lg p-3 border border-border/80 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary resize-y"
-              />
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                <span className="text-muted-foreground">
-                  {liveTranscript.trim().length > 0
-                    ? `${liveTranscript.trim().split(/\s+/).filter(Boolean).length} words ready for AI evaluation`
-                    : "Tip: Type your pitch above or click the sample pitch button."}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setLiveTranscript(
-                      "Good morning Dr. Sharma, thank you for your time today. I would like to introduce CardioCare A for your uncontrolled hypertension patients. Clinical trials show consistent 24-hour BP reduction with convenient once-daily morning dosing and an exceptional safety profile. May I provide starter sample packs for your clinic this week?"
-                    )
-                  }
-                  className="text-primary hover:underline font-semibold cursor-pointer"
-                >
-                  Fill with sample detailing pitch
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="mt-6 border-t border-border pt-5">
             <p className="flex items-center justify-center gap-2 text-sm font-semibold text-primary">
               <Sparkles className="size-4" />
@@ -599,12 +504,6 @@ function RecordPracticePage() {
           </div>
         </section>
       </div>
-
-      <AiConfigModal
-        open={isAiModalOpen}
-        onOpenChange={setIsAiModalOpen}
-        onConfigChanged={() => setGeminiActive(isGeminiConfigured())}
-      />
     </AppShell>
   );
 }
