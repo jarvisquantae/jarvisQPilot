@@ -165,6 +165,15 @@ export interface CoverageCheck {
   state: CoverageState;
 }
 
+export interface ConceptDetection {
+  id: string;
+  label: string;
+  detected: boolean;
+  exactWording?: string;
+  score: number;
+  reason?: string;
+}
+
 export interface AssessmentResult {
   id: string;
   attemptId: string;
@@ -179,6 +188,11 @@ export interface AssessmentResult {
   improvements: Feedback[];
   coverage: CoverageCheck[];
   requiresHumanReview: boolean;
+  confidenceScore?: number;
+  reviewRecommendation?: string;
+  readinessLabel?: string;
+  concepts?: ConceptDetection[];
+  prohibitedClaimsDetected?: string[];
 }
 
 export interface ScorePoint {

@@ -103,7 +103,7 @@ export async function savePracticeAttempt({
 
       if (aiResult) {
         isAiEvaluated = aiResult.isAiGenerated;
-        score = Math.round(aiResult.accuracy * 0.5 + aiResult.adherence * 0.5);
+        score = aiResult.score;
         rating = aiResult.rating;
         verdict = aiResult.verdict;
 
@@ -124,6 +124,12 @@ export async function savePracticeAttempt({
         baseAssessment.adherence = aiResult.adherence;
         baseAssessment.rating = aiResult.rating;
         baseAssessment.readiness = aiResult.readiness;
+        baseAssessment.requiresHumanReview = aiResult.requiresHumanReview;
+        baseAssessment.confidenceScore = aiResult.confidenceScore;
+        baseAssessment.reviewRecommendation = aiResult.reviewRecommendation;
+        baseAssessment.readinessLabel = aiResult.readinessLabel;
+        baseAssessment.concepts = aiResult.concepts;
+        baseAssessment.prohibitedClaimsDetected = aiResult.prohibitedClaimsDetected;
         baseAssessment.positives = aiResult.positives || [];
         baseAssessment.improvements = aiResult.improvements || [];
         baseAssessment.coverage = aiResult.coverage || [];
