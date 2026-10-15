@@ -330,32 +330,47 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   }
 
   try {
-    const [campaignsRes, attemptsRes, inputsRes] = await Promise.all([
-      supabase.from("campaigns").select("readiness_score"),
-      supabase.from("practice_attempts").select("id", { count: "exact" }),
-      supabase.from("promotional_inputs").select("status"),
-    ]);
+    const { data: results, error } = await supabase
+      .from("assessment_results")
+      .select("accuracy, adherence, rating, readiness")
+      .order("created_at", { ascending: false })
+      .limit(10);
 
-    const campaigns = campaignsRes.data || [];
-    const inputs = inputsRes.data || [];
-    const completedAttemptsCount = attemptsRes.count ?? 0;
-
-    if (campaigns.length === 0) {
+    if (error || !results || results.length === 0) {
       return mock.dashboardMetrics;
     }
 
-    const avgReadiness = Math.round(
-      campaigns.reduce((acc, c: any) => acc + (c.readiness_score || 0), 0) / campaigns.length,
+    const latest = results[0];
+    const previous = results[1] || latest;
+
+    const avgAccuracy = Math.round(
+      results.reduce((acc, r: any) => acc + (r.accuracy || 0), 0) / results.length,
     );
-    const completedInputs = inputs.filter((inp: any) => inp.status === "completed").length;
+    const avgAdherence = Math.round(
+      results.reduce((acc, r: any) => acc + (r.adherence || 0), 0) / results.length,
+    );
+    const avgRating = Number(
+      (
+        results.reduce((acc, r: any) => acc + Number(r.rating || 0), 0) / results.length
+      ).toFixed(1),
+    );
+
+    const accuracyDelta = (latest?.accuracy || 0) - (previous?.accuracy || 0);
+    const adherenceDelta = (latest?.adherence || 0) - (previous?.adherence || 0);
+    const ratingDelta = Number(((latest?.rating || 0) - (previous?.rating || 0)).toFixed(1));
 
     return {
-      readinessScore: avgReadiness || mock.dashboardMetrics.readinessScore,
-      deltaPercent: 6,
-      completedInputs: completedInputs || mock.dashboardMetrics.completedInputs,
-      totalInputs: inputs.length || mock.dashboardMetrics.totalInputs,
-      activePractices: Math.max(1, completedAttemptsCount),
-      scheduledPractices: 3,
+      accuracy: latest?.accuracy ?? avgAccuracy,
+      accuracyDelta,
+      adherence: latest?.adherence ?? avgAdherence,
+      adherenceDelta,
+      rating: latest?.rating ? Number(latest.rating) : avgRating,
+      ratingDelta,
+      readiness: (latest?.readiness as any) || "on_track",
+      readinessNote:
+        latest?.readiness === "ready"
+          ? "Ready for Field Execution"
+          : "Detailing Practice Recommended",
     };
   } catch (err) {
     console.warn("Supabase getDashboardMetrics failed, using mock:", err);

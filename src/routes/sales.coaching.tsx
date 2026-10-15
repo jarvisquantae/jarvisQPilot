@@ -27,6 +27,8 @@ import {
   teamMembers,
 } from "@/data/sales";
 
+import { toast } from "sonner";
+
 export const Route = createFileRoute("/sales/coaching")({
   head: () => ({
     meta: [
@@ -52,10 +54,29 @@ const planTone = (status: string) =>
   status === "Completed" ? "success" : status === "In Progress" ? "teal" : "warning";
 
 function Coaching() {
+  const [plans, setPlans] = useState(coachingPlans);
   const [member, setMember] = useState(teamMembers[0]!.name);
   const [brand, setBrand] = useState(brands[0]!.name);
   const [issue, setIssue] = useState(coachingIssues[0]!);
   const [due, setDue] = useState("2025-06-15");
+  const [note, setNote] = useState("");
+
+  const handleAssignPlan = () => {
+    const selectedTM = teamMembers.find((tm) => tm.name === member) ?? teamMembers[0]!;
+    const selectedBrand = brands.find((b) => b.name === brand) ?? brands[0]!;
+    const newPlan = {
+      id: `cp-${Date.now()}`,
+      memberId: selectedTM.id,
+      brandId: selectedBrand.id,
+      area: issue,
+      dueDate: due,
+      status: "In Progress" as const,
+      note,
+    };
+    setPlans((prev) => [newPlan, ...prev]);
+    setNote("");
+    toast.success(`Coaching plan assigned to ${member} for ${brand}!`);
+  };
 
   return (
     <SalesShell>
@@ -131,7 +152,7 @@ function Coaching() {
         <div className="grid gap-4 lg:grid-cols-3">
           <SectionCard
             title="Assign Coaching"
-            subtitle="Mock assignment — nothing is sent yet"
+            subtitle="Targeted coaching commitments based on detailing gaps"
             icon={<GraduationCap className="size-5" />}
           >
             <div className="space-y-4">
@@ -170,11 +191,15 @@ function Coaching() {
                 </span>
                 <textarea
                   rows={3}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
                   placeholder="What should they practise before the next visit?"
                   className="rounded-2xl border border-border bg-card p-3 text-sm text-navy placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </label>
-              <Button className="w-full">Assign coaching plan</Button>
+              <Button onClick={handleAssignPlan} className="w-full cursor-pointer">
+                Assign coaching plan
+              </Button>
             </div>
           </SectionCard>
 
@@ -194,7 +219,7 @@ function Coaching() {
                 </tr>
               </thead>
               <tbody>
-                {coachingPlans.map((plan) => {
+                {plans.map((plan) => {
                   const tm = memberById(plan.memberId);
                   return (
                     <Tr key={plan.id}>

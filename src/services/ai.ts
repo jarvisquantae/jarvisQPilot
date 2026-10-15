@@ -37,7 +37,8 @@ export const getGeminiApiKey = (): string | undefined => {
     const localKey = localStorage.getItem("qp_gemini_api_key");
     if (localKey && localKey.trim().length > 10) return localKey.trim();
   }
-  const envKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  const envObj = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : process.env;
+  const envKey = envObj?.['VITE_GEMINI_API_KEY'] as string | undefined;
   if (envKey && envKey.trim().length > 10 && !envKey.includes("your-")) {
     return envKey.trim();
   }
@@ -129,21 +130,21 @@ export function calculateApplicationScores({
   const inputConcept = getConcept("input_explanation");
   const closingConcept = getConcept("closing_ask");
 
-  const mandatoryScore = mandatoryConcept?.detected
+  const mandatoryScore = mandatoryConcept
     ? Math.min(100, Math.max(0, mandatoryConcept.score))
-    : 40;
-  const scientificScore = scientificConcept?.detected
+    : 0;
+  const scientificScore = scientificConcept
     ? Math.min(100, Math.max(0, scientificConcept.score))
-    : 40;
-  const adherenceScore = adherenceConcept?.detected
+    : 0;
+  const adherenceScore = adherenceConcept
     ? Math.min(100, Math.max(0, adherenceConcept.score))
-    : 45;
-  const inputScore = inputConcept?.detected
+    : 0;
+  const inputScore = inputConcept
     ? Math.min(100, Math.max(0, inputConcept.score))
-    : 35;
-  const closingScore = closingConcept?.detected
+    : 0;
+  const closingScore = closingConcept
     ? Math.min(100, Math.max(0, closingConcept.score))
-    : 30;
+    : 0;
 
   // Weighted total score formula (0-100)
   let weightedScore = Math.round(
@@ -172,17 +173,19 @@ export function calculateApplicationScores({
   let ratingLabel: string;
   let rating: number;
 
-  if (weightedScore >= 90) {
+  const qualifiesForField = !hasCriticalClaim && mandatoryScore >= 60;
+
+  if (weightedScore >= 90 && qualifiesForField) {
     readiness = "ready";
     readinessLabel = "Ready for Field Execution";
     ratingLabel = "Excellent";
     rating = Number((4.8 + ((weightedScore - 90) / 10) * 0.2).toFixed(1));
-  } else if (weightedScore >= 80) {
+  } else if (weightedScore >= 80 && qualifiesForField) {
     readiness = "ready";
     readinessLabel = "Ready (Very Good)";
     ratingLabel = "Very Good";
     rating = Number((4.2 + ((weightedScore - 80) / 10) * 0.5).toFixed(1));
-  } else if (weightedScore >= 70) {
+  } else if (weightedScore >= 70 && !hasCriticalClaim) {
     readiness = "on_track";
     readinessLabel = "Nearly Ready";
     ratingLabel = "Good";
@@ -232,9 +235,9 @@ export function evaluateSpokenTranscriptLocal({
   rubric,
 }: {
   spokenTranscript: string;
-  campaign?: Campaign;
-  pitch?: Pitch;
-  rubric?: AssessmentRubric;
+  campaign?: Campaign | undefined;
+  pitch?: Pitch | undefined;
+  rubric?: AssessmentRubric | undefined;
 }): GeminiAssessmentResult {
   const cleanText = spokenTranscript.trim();
   const lower = cleanText.toLowerCase();
@@ -255,6 +258,7 @@ export function evaluateSpokenTranscriptLocal({
     return {
       transcript: [
         {
+          id: "turn-1",
           speaker: "tm",
           speakerLabel: "Territory Manager (You)",
           text:
@@ -463,6 +467,7 @@ export function evaluateSpokenTranscriptLocal({
   return {
     transcript: [
       {
+        id: "turn-1",
         speaker: "tm",
         speakerLabel: "Territory Manager (You)",
         text: cleanText,
@@ -500,8 +505,8 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1];
+      const dataUrl = (reader.result as string) || "";
+      const base64 = dataUrl.split(",")[1] || "";
       resolve(base64);
     };
     reader.onerror = reject;
@@ -522,10 +527,10 @@ export async function evaluateWithGemini({
   rubric,
 }: {
   audioBlob: Blob;
-  spokenTranscript?: string;
-  campaign?: Campaign;
-  pitch?: Pitch;
-  rubric?: AssessmentRubric;
+  spokenTranscript?: string | undefined;
+  campaign?: Campaign | undefined;
+  pitch?: Pitch | undefined;
+  rubric?: AssessmentRubric | undefined;
 }): Promise<GeminiAssessmentResult> {
   const apiKey = getGeminiApiKey();
 
@@ -554,7 +559,8 @@ export async function evaluateWithGemini({
   try {
     const base64Audio = await blobToBase64(audioBlob);
     // Sanitize MIME type (strip parameters like codecs=opus which cause 400 Bad Request on Gemini)
-    const mimeType = (audioBlob.type || "audio/webm").split(";")[0].trim() || "audio/webm";
+    const rawType = audioBlob.type || "audio/webm";
+    const mimeType = rawType.split(";")[0]?.trim() || "audio/webm";
     const vocabularyHints = buildVocabularyHints(campaign, pitch, rubric);
 
     const prompt = `
@@ -647,7 +653,13 @@ Return ONLY a valid JSON object matching this schema:
 }
 `;
 
-    const models = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+    const models = [
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
+      "gemini-3.8-flash",
+      "gemini-3.5-flash",
+      "gemini-flash-latest",
+    ];
     let response: Response | null = null;
     let lastError = "";
 
@@ -763,9 +775,15 @@ Return ONLY a valid JSON object matching this schema:
     return {
       transcript:
         Array.isArray(parsed.transcript) && parsed.transcript.length > 0
-          ? parsed.transcript
+          ? parsed.transcript.map((t: any, idx: number) => ({
+              id: t.id || `turn-${idx + 1}`,
+              speaker: t.speaker || "tm",
+              speakerLabel: t.speakerLabel || "Territory Manager (You)",
+              text: t.text || "",
+            }))
           : [
               {
+                id: "turn-1",
                 speaker: "tm",
                 speakerLabel: "Territory Manager (You)",
                 text: spokenTranscript || "Audio recording submitted.",

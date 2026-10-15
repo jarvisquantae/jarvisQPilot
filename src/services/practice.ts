@@ -15,8 +15,8 @@ export interface SaveAttemptParams {
   mode: "guided" | "full";
   durationSeconds: number;
   audioUrl: string;
-  audioBlob?: Blob;
-  spokenTranscript?: string;
+  audioBlob?: Blob | undefined;
+  spokenTranscript?: string | undefined;
 }
 
 export async function savePracticeAttempt({
@@ -82,6 +82,7 @@ export async function savePracticeAttempt({
     positives: [],
     improvements: [],
     coverage: [],
+    requiresHumanReview: false,
   };
 
   // Evaluate detailing audio using Gemini 2.0 Flash or local spoken speech engine
@@ -149,6 +150,7 @@ export async function savePracticeAttempt({
     rating,
     verdict,
     durationSeconds,
+    audioUrl,
   };
 
   // Update in-memory active cache so next screens display the fresh AI evaluation immediately
@@ -198,9 +200,11 @@ export async function savePracticeAttempt({
       adherence: baseAssessment.adherence,
       rating: baseAssessment.rating,
       readiness: baseAssessment.readiness,
+      calculated_by: "application",
       positives: baseAssessment.positives,
       improvements: baseAssessment.improvements,
       coverage: baseAssessment.coverage,
+      requires_human_review: baseAssessment.requiresHumanReview,
     });
   } catch (err) {
     console.warn("Could not write practice attempt to Supabase (using active memory state):", err);

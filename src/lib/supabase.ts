@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const envObj = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : process.env;
+const supabaseUrl = envObj?.['VITE_SUPABASE_URL'] as string | undefined;
+const supabaseAnonKey = envObj?.['VITE_SUPABASE_ANON_KEY'] as string | undefined;
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
@@ -14,7 +15,7 @@ export const isSupabaseConfigured = (): boolean => {
 };
 
 export const isMockFallbackEnabled = (): boolean => {
-  const forceMock = import.meta.env.VITE_USE_MOCK_FALLBACK === "true";
+  const forceMock = envObj?.['VITE_USE_MOCK_FALLBACK'] === "true";
   return forceMock || !isSupabaseConfigured();
 };
 

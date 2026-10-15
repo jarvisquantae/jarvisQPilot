@@ -1,0 +1,48 @@
+import type { User, UserRole } from "@/types";
+
+export const DEMO_USERS: Record<UserRole, User> = {
+  TM: {
+    id: "usr-tm-001",
+    name: "Arjun Mehta",
+    role: "TM",
+    roleLabel: "Territory Manager",
+    email: "tm.manager@quantae.ai",
+    territory: "North Zone",
+    reportingManager: "Regional Sales Manager",
+    currentCampaignId: "cardiocare-a",
+    initials: "AM",
+  },
+  MM: {
+    id: "usr-mm-001",
+    name: "Sarah Jenkins",
+    role: "MM",
+    roleLabel: "Marketing Manager",
+    email: "marketing.lead@quantae.ai",
+    territory: "Corporate HQ",
+    reportingManager: "VP Brand Marketing",
+    currentCampaignId: "cardiocare-a",
+    initials: "SJ",
+  },
+  SM: {
+    id: "usr-sm-001",
+    name: "Vikram Malhotra",
+    role: "SM",
+    roleLabel: "Sales Manager",
+    email: "sales.director@quantae.ai",
+    territory: "North & East Region",
+    reportingManager: "VP Commercial Operations",
+    currentCampaignId: "cardiocare-a",
+    initials: "VM",
+  },
+  ADMIN: {
+    id: "usr-adm-001",
+    name: "Super Admin",
+    role: "ADMIN",
+    roleLabel: "System Administrator",
+    email: "admin@quantae.ai",
+    territory: "Global",
+    reportingManager: "Chief Technology Officer",
+    currentCampaignId: "cardiocare-a",
+    initials: "SA",
+  },
+};

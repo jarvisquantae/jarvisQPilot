@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CircleCheck, Rocket, TriangleAlert, Undo2 } from "lucide-react";
 import { MarketingShell } from "@/components/layout/MarketingShell";
@@ -13,6 +14,7 @@ import {
 } from "@/components/console/primitives";
 import { Button } from "@/components/ui/button";
 import { MM_PUBLISH_CHECKLIST, MM_PUBLISH_HISTORY } from "@/data/marketing";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/marketing/publish")({
   head: () => ({
@@ -36,20 +38,52 @@ export const Route = createFileRoute("/marketing/publish")({
 });
 
 function CampaignPublication() {
+  const [history, setHistory] = useState(MM_PUBLISH_HISTORY);
+  const [isPublished, setIsPublished] = useState(false);
   const ready = MM_PUBLISH_CHECKLIST.filter((row) => row.state === "Ready").length;
+
+  const handlePublish = () => {
+    setIsPublished(true);
+    setHistory((prev) => [
+      {
+        campaign: "CARDIOCARE Q2",
+        version: "v2.4",
+        action: "Published",
+        by: "Sarah Jenkins (MM)",
+        at: "Just now",
+      },
+      ...prev,
+    ]);
+    toast.success("CARDIOCARE Q2 published! Campaign bundle pushed to field teams.");
+  };
+
+  const handleWithdraw = () => {
+    setIsPublished(false);
+    setHistory((prev) => [
+      {
+        campaign: "CARDIOCARE Q2",
+        version: "v2.4",
+        action: "Withdrawn",
+        by: "Sarah Jenkins (MM)",
+        at: "Just now",
+      },
+      ...prev,
+    ]);
+    toast.warning("CARDIOCARE Q2 withdrawn. Reverted to draft state for revision.");
+  };
 
   return (
     <MarketingShell searchPlaceholder="Search campaigns to publish...">
       <ConsolePageTitle
         title="Campaign Publication"
-        subtitle="CARDIOCARE Q2 · Apr 01 – Jun 30, 2025 · 67 TMs in scope"
+        subtitle={`CARDIOCARE Q2 · Apr 01 – Jun 30, 2025 · 67 TMs in scope ${isPublished ? "· (Currently Published)" : ""}`}
         actions={
           <>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleWithdraw}>
               <Undo2 className="size-4" /> Withdraw campaign
             </Button>
-            <Button>
-              <Rocket className="size-4" /> Publish campaign
+            <Button onClick={handlePublish} disabled={isPublished}>
+              <Rocket className="size-4" /> {isPublished ? "Campaign Published" : "Publish campaign"}
             </Button>
           </>
         }
@@ -111,7 +145,7 @@ function CampaignPublication() {
             <TableWrap>
               <THead columns={["Campaign", "Version", "Action", "By", { label: "When", align: "right" }]} />
               <tbody>
-                {MM_PUBLISH_HISTORY.map((row) => (
+                {history.map((row) => (
                   <TR key={`${row.campaign}-${row.at}`}>
                     <TD strong>{row.campaign}</TD>
                     <TD>{row.version}</TD>

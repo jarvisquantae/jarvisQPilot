@@ -11,52 +11,8 @@ import type { User as SupabaseAuthUser, Session } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { User, UserRole } from "@/types";
 
-export const DEMO_USERS: Record<UserRole, User> = {
-  TM: {
-    id: "usr-tm-001",
-    name: "Arjun Mehta",
-    role: "TM",
-    roleLabel: "Territory Manager",
-    email: "tm.manager@quantae.ai",
-    territory: "North Zone",
-    reportingManager: "Regional Sales Manager",
-    currentCampaignId: "cardiocare-a",
-    initials: "AM",
-  },
-  MM: {
-    id: "usr-mm-001",
-    name: "Sarah Jenkins",
-    role: "MM",
-    roleLabel: "Marketing Manager",
-    email: "marketing.lead@quantae.ai",
-    territory: "Corporate HQ",
-    reportingManager: "VP Brand Marketing",
-    currentCampaignId: "cardiocare-a",
-    initials: "SJ",
-  },
-  SM: {
-    id: "usr-sm-001",
-    name: "Vikram Malhotra",
-    role: "SM",
-    roleLabel: "Sales Manager",
-    email: "sales.director@quantae.ai",
-    territory: "North & East Region",
-    reportingManager: "VP Commercial Operations",
-    currentCampaignId: "cardiocare-a",
-    initials: "VM",
-  },
-  ADMIN: {
-    id: "usr-adm-001",
-    name: "Super Admin",
-    role: "ADMIN",
-    roleLabel: "System Administrator",
-    email: "admin@quantae.ai",
-    territory: "Global",
-    reportingManager: "Chief Technology Officer",
-    currentCampaignId: "cardiocare-a",
-    initials: "SA",
-  },
-};
+import { DEMO_USERS } from "@/lib/users";
+export { DEMO_USERS };
 
 interface AuthContextValue {
   session: Session | null;
@@ -120,8 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Upsert default profile for newly registered user
-      const defaultRole = (sbUser.user_metadata?.role as UserRole) || "TM";
-      const name = sbUser.user_metadata?.name || sbUser.email?.split("@")[0] || "User";
+      const userMeta = sbUser.user_metadata as Record<string, any> | undefined;
+      const defaultRole = (userMeta?.['role'] as UserRole) || "TM";
+      const name = userMeta?.['name'] || sbUser.email?.split("@")[0] || "User";
       const roleLabel = DEMO_USERS[defaultRole]?.roleLabel || "Territory Manager";
       const initials = name.slice(0, 2).toUpperCase();
 

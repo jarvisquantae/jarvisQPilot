@@ -42,7 +42,17 @@ export const Route = createFileRoute("/marketing/assignment")({
   component: MarketingAssignment,
 });
 
+import { useRef } from "react";
+import { toast } from "sonner";
+
 function MarketingAssignment() {
+  const issuesRef = useRef<HTMLDivElement>(null);
+
+  const handlePreviewIssues = () => {
+    issuesRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    toast.warning("Pre-publish check: 1 blocking issue and 1 warning detected below.");
+  };
+
   return (
     <MarketingShell searchPlaceholder="Search TMs, HQs, SM teams...">
       <ConsolePageTitle
@@ -50,7 +60,9 @@ function MarketingAssignment() {
         subtitle="Assign the full campaign bundle by region, HQ, Sales Manager team or individual TM, then preview issues before publishing."
         actions={
           <>
-            <Button variant="outline">Preview issues</Button>
+            <Button variant="outline" onClick={handlePreviewIssues} className="cursor-pointer">
+              Preview issues
+            </Button>
             <Button asChild>
               <Link to="/marketing/publish">Publish assignment</Link>
             </Button>
@@ -104,7 +116,8 @@ function MarketingAssignment() {
             </TableWrap>
           </Panel>
 
-          <Panel title="Pre-publish issues">
+          <div ref={issuesRef}>
+            <Panel title="Pre-publish issues">
             <ul className="space-y-3">
               {MM_ASSIGNMENT_ISSUES.map((issue) => (
                 <li
@@ -127,6 +140,7 @@ function MarketingAssignment() {
               ))}
             </ul>
           </Panel>
+          </div>
         </div>
 
         <Panel

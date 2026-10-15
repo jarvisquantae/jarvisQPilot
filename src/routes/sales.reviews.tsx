@@ -52,23 +52,43 @@ const REVIEW_STATUS = ["All Statuses", "Good", "Needs Review", "Critical"];
 const reviewTone = (status: string) =>
   status === "Good" ? "success" : status === "Needs Review" ? "ai" : "warning";
 
+import { toast } from "sonner";
+
 const coverageTone = (state: string) =>
   state === "Covered" ? "success" : state === "Partial" ? "ai" : "warning";
 
 function Reviews() {
+  const [reviewsList, setReviewsList] = useState(reviews);
+  const [feedbackInput, setFeedbackInput] = useState("");
   const [brand, setBrand] = useState(BRAND_FILTERS[0]!);
   const [status, setStatus] = useState(REVIEW_STATUS[0]!);
   const [region, setRegion] = useState(REGIONS[0]!);
   const [selectedId, setSelectedId] = useState(reviews[0]!.id);
 
-  const filtered = reviews.filter((review) => {
+  const filtered = reviewsList.filter((review) => {
     if (brand !== BRAND_FILTERS[0] && brandById(review.brandId).name !== brand) return false;
     if (status !== REVIEW_STATUS[0] && review.reviewStatus !== status) return false;
     return true;
   });
 
-  const selected = reviews.find((review) => review.id === selectedId) ?? reviews[0]!;
+  const selected = reviewsList.find((review) => review.id === selectedId) ?? reviewsList[0]!;
   const selectedMember = memberById(selected.memberId);
+
+  const handleSaveFeedback = () => {
+    if (!feedbackInput.trim()) {
+      toast.error("Please enter coaching feedback before saving.");
+      return;
+    }
+    setReviewsList((prev) =>
+      prev.map((r) =>
+        r.id === selectedId
+          ? { ...r, feedback: [...r.feedback, feedbackInput.trim()] }
+          : r,
+      ),
+    );
+    setFeedbackInput("");
+    toast.success(`Feedback saved for ${selectedMember.name}!`);
+  };
 
   return (
     <SalesShell>
@@ -228,12 +248,16 @@ function Reviews() {
                 </span>
                 <textarea
                   rows={3}
+                  value={feedbackInput}
+                  onChange={(e) => setFeedbackInput(e.target.value)}
                   placeholder="Write coaching feedback for this attempt…"
                   className="mt-1.5 w-full rounded-2xl border border-border bg-card p-3 text-sm text-navy placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </label>
               <div className="mt-3 flex gap-2">
-                <Button size="sm">Save feedback</Button>
+                <Button size="sm" onClick={handleSaveFeedback} className="cursor-pointer">
+                  Save feedback
+                </Button>
                 <Button variant="outline" size="sm" asChild>
                   <Link to="/sales/coaching">Assign coaching</Link>
                 </Button>

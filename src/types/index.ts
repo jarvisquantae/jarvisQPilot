@@ -121,6 +121,7 @@ export interface PracticeAttempt {
   rating: number;
   verdict: string;
   durationSeconds: number;
+  audioUrl?: string | undefined;
 }
 
 export type TranscriptSpeaker = "tm" | "hcp";
@@ -169,9 +170,9 @@ export interface ConceptDetection {
   id: string;
   label: string;
   detected: boolean;
-  exactWording?: string;
+  exactWording?: string | undefined;
   score: number;
-  reason?: string;
+  reason?: string | undefined;
 }
 
 export interface AssessmentResult {
@@ -188,11 +189,11 @@ export interface AssessmentResult {
   improvements: Feedback[];
   coverage: CoverageCheck[];
   requiresHumanReview: boolean;
-  confidenceScore?: number;
-  reviewRecommendation?: string;
-  readinessLabel?: string;
-  concepts?: ConceptDetection[];
-  prohibitedClaimsDetected?: string[];
+  confidenceScore?: number | undefined;
+  reviewRecommendation?: string | undefined;
+  readinessLabel?: string | undefined;
+  concepts?: ConceptDetection[] | undefined;
+  prohibitedClaimsDetected?: string[] | undefined;
 }
 
 export interface ScorePoint {
