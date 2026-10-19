@@ -175,10 +175,10 @@ export const MM_AUDIO_LIBRARY = [
 ];
 
 export const MM_VOCAB_STATS = [
-  { label: "Active Terms", value: 428, delta: "+18", deltaLabel: " vs Q1 2025", tone: "teal" as const },
-  { label: "Brands Covered", value: 24, delta: "+3", deltaLabel: " vs Q1 2025", tone: "info" as const },
+  { label: "Active Terms", value: 500, delta: "+500", deltaLabel: " WhatsApp dictionary", tone: "teal" as const },
+  { label: "Brands & Specialties", value: 54, delta: "+30", deltaLabel: " therapy areas", tone: "info" as const },
   { label: "Pending Review", value: 32, delta: "+7", deltaLabel: " vs Q1 2025", tone: "warning" as const },
-  { label: "Deprecated Terms", value: 15, delta: "-2", deltaLabel: " vs Q1 2025", tone: "danger" as const },
+  { label: "PV & Risk Guardrails", value: 166, delta: "Active", deltaLabel: " strict safety flags", tone: "danger" as const },
 ];
 
 export const MM_VOCAB = [
@@ -302,6 +302,7 @@ export const MM_VOCAB_REVIEW_QUEUE = [
 ];
 
 export const MM_VOCAB_VERSIONS = [
+  { version: "v6", specialty: "Multi-Specialty (All)", terms: 500, effective: "Oct 19, 2026", status: "Published", by: "Medical Advisor/Manager" },
   { version: "v5", specialty: "Cardiology", terms: 168, effective: "Jun 12, 2025", status: "Published", by: "Priya Nair" },
   { version: "v4", specialty: "Pulmonology", terms: 94, effective: "Jun 05, 2025", status: "Published", by: "Sneha Iyer" },
   { version: "v3", specialty: "Endocrinology", terms: 88, effective: "Jul 01, 2025", status: "Review", by: "Rahul Sharma" },

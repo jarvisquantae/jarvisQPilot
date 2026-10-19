@@ -53,7 +53,8 @@ export const setGeminiApiKey = (key: string) => {
 };
 
 export const isGeminiConfigured = (): boolean => {
-  return Boolean(getGeminiApiKey());
+  const key = getGeminiApiKey();
+  return Boolean(key && key.trim().length >= 20);
 };
 
 /**
@@ -307,11 +308,15 @@ export function evaluateSpokenTranscriptLocal({
   campaign,
   pitch,
   rubric,
+  errorMessage,
+  isAiGenerated = false,
 }: {
   spokenTranscript: string;
   campaign?: Campaign | undefined;
   pitch?: Pitch | undefined;
   rubric?: AssessmentRubric | undefined;
+  errorMessage?: string | undefined;
+  isAiGenerated?: boolean | undefined;
 }): GeminiAssessmentResult {
   const cleanText = spokenTranscript.trim();
   const lower = cleanText.toLowerCase();
@@ -320,7 +325,7 @@ export function evaluateSpokenTranscriptLocal({
   if (!cleanText || cleanText.length < 5) {
     const emptyScores = calculateApplicationScores({
       concepts: [
-        { id: "mandatory_messages", label: "Mandatory Messages (35%)", detected: false, score: 30, reason: "No clear speech detected" },
+        { id: "mandatory_messages", label: "Mandatory Messages (35%)", detected: false, score: 30, reason: errorMessage ? `Error: ${errorMessage}` : "No clear speech detected" },
         { id: "scientific_accuracy", label: "Scientific & Product Accuracy (25%)", detected: false, score: 35, reason: "No clinical content articulated" },
         { id: "pitch_adherence", label: "Pitch Flow & Sequence (20%)", detected: false, score: 35, reason: "Flow missing" },
         { id: "input_explanation", label: "Input Explanation (10%)", detected: false, score: 30, reason: "No input explanation" },
@@ -337,7 +342,9 @@ export function evaluateSpokenTranscriptLocal({
           speakerLabel: "Territory Manager (You)",
           text:
             cleanText ||
-            "[No clear speech detected in recording. Please check microphone permissions and speak clearly during your detailing pitch.]",
+            (errorMessage
+              ? `[Evaluation Error: ${errorMessage}]`
+              : "[No clear speech detected in recording. Please check microphone permissions and speak clearly during your detailing pitch.]"),
         },
       ],
       accuracy: emptyScores.accuracy,
@@ -349,29 +356,37 @@ export function evaluateSpokenTranscriptLocal({
       readinessLabel: emptyScores.readinessLabel,
       confidenceScore: 40,
       requiresHumanReview: true,
-      reviewRecommendation: "Insufficient speech detected — Repeat Practice",
+      reviewRecommendation: errorMessage
+        ? `Upstream Error: ${errorMessage.slice(0, 100)}`
+        : "Insufficient speech detected — Repeat Practice",
       concepts: [
-        { id: "mandatory_messages", label: "Mandatory Messages (35%)", detected: false, score: 30, reason: "No clear speech detected" },
+        { id: "mandatory_messages", label: "Mandatory Messages (35%)", detected: false, score: 30, reason: errorMessage ? `Error: ${errorMessage}` : "No clear speech detected" },
         { id: "scientific_accuracy", label: "Scientific & Product Accuracy (25%)", detected: false, score: 35, reason: "No clinical content articulated" },
         { id: "pitch_adherence", label: "Pitch Flow & Sequence (20%)", detected: false, score: 35, reason: "Flow missing" },
         { id: "input_explanation", label: "Input Explanation (10%)", detected: false, score: 30, reason: "No input explanation" },
         { id: "closing_ask", label: "Closing Action (10%)", detected: false, score: 25, reason: "No commitment ask" },
       ],
       prohibitedClaimsDetected: [],
-      verdict: "Insufficient speech detected for complete assessment. Please repeat your detailing pitch.",
+      verdict: errorMessage
+        ? `API/Service Issue: ${errorMessage}. Please check API key configuration or network connectivity.`
+        : "Insufficient speech detected for complete assessment. Please repeat your detailing pitch.",
       positives: [
         {
           id: "pos-mic",
           title: "Microphone Stream Captured",
-          detail: "Audio stream was received successfully by the detailing engine.",
+          detail: errorMessage
+            ? `Audio recording was captured, but processing encountered: ${errorMessage}`
+            : "Audio stream was received successfully by the detailing engine.",
           kind: "positive",
         },
       ],
       improvements: [
         {
           id: "imp-voice",
-          title: "Speak Louder and Clearer",
-          detail: "Ensure you clearly deliver the opening, clinical efficacy, and commitment ask into the microphone.",
+          title: errorMessage ? "Check API & Permissions" : "Speak Louder and Clearer",
+          detail: errorMessage
+            ? `Service notification: ${errorMessage}. Ensure your Gemini API key is valid and backend proxy is reachable.`
+            : "Ensure you clearly deliver the opening, clinical efficacy, and commitment ask into the microphone.",
           kind: "improvement",
         },
       ],
@@ -568,7 +583,7 @@ export function evaluateSpokenTranscriptLocal({
     positives,
     improvements,
     coverage,
-    isAiGenerated: false,
+    isAiGenerated: isAiGenerated ?? false,
   };
 }
 
@@ -608,9 +623,9 @@ export async function evaluateWithGemini({
 }): Promise<GeminiAssessmentResult> {
   const apiKey = getGeminiApiKey();
 
-  // If Gemini key is not present, evaluate the user's real spoken words locally
+  // If Gemini key is not present, evaluate with local speech engine
   if (!apiKey) {
-    console.info("Gemini API key not configured, evaluating user's real spoken audio with local rubric engine");
+    console.info("Gemini API key not configured, evaluating user's spoken audio with local rubric engine");
     return evaluateSpokenTranscriptLocal({
       spokenTranscript: spokenTranscript || "",
       campaign,
@@ -727,82 +742,69 @@ Return ONLY a valid JSON object matching this schema:
 }
 `;
 
-    const models = [
-      "gemini-3.5-flash-lite",
-      "gemini-3.1-flash-lite",
-      "gemini-3.8-flash",
-      "gemini-3.5-flash",
-      "gemini-flash-latest",
-    ];
     let response: Response | null = null;
     let lastError = "";
 
-    for (const model of models) {
-      try {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType,
-                      data: base64Audio,
-                    },
-                  },
-                  {
-                    text: prompt,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.2,
-            },
-          }),
-        });
+    // 1. Dispatch request through Q-Pilot's backend server proxy (Node.js/Nitro)
+    // Runs server-to-server with x-goog-api-key without exposing API secrets or triggering CORS
+    try {
+      const proxyRes = await fetch("/api/gemini/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mimeType,
+          base64Audio,
+          prompt,
+          task: "evaluate",
+        }),
+      });
 
-        if (res.ok) {
-          response = res;
-          break;
-        } else {
-          lastError = await res.text();
-          console.warn(`Gemini model ${model} returned ${res.status}:`, lastError);
-        }
-      } catch (err: any) {
-        lastError = err?.message || "fetch error";
+      if (proxyRes.ok) {
+        response = proxyRes;
+      } else {
+        const errJson = await proxyRes.json().catch(() => null);
+        lastError = errJson?.error || (await proxyRes.text().catch(() => `HTTP ${proxyRes.status}`));
+        console.warn("Backend proxy error:", lastError);
       }
+    } catch (proxyErr: any) {
+      lastError = proxyErr?.message || "Backend proxy unavailable";
+      console.warn("Backend proxy fetch failed:", lastError);
     }
 
     if (!response || !response.ok) {
-      console.warn("All Gemini models failed, falling back to local rubric engine:", lastError);
+      console.error("Gemini proxy assessment failed, preserving real error:", lastError);
       return evaluateSpokenTranscriptLocal({
         spokenTranscript: spokenTranscript || "",
         campaign,
         pitch,
         rubric,
+        errorMessage: lastError || "Failed to connect to Gemini API endpoint.",
+        isAiGenerated: false,
       });
     }
 
     const data = await response.json();
-    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const candidateParts = data?.candidates?.[0]?.content?.parts || [];
+    const candidateText = candidateParts
+      .map((p: any) => p.text || "")
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+
     if (!candidateText) {
+      const finishReason = data?.candidates?.[0]?.finishReason || "NO_CANDIDATE";
       console.warn("No text in Gemini candidate response:", data);
       return evaluateSpokenTranscriptLocal({
         spokenTranscript: spokenTranscript || "",
         campaign,
         pitch,
         rubric,
+        errorMessage: `Gemini returned candidate count ${data?.candidates?.length ?? 0} (finishReason: ${finishReason}). No transcription text was generated.`,
+        isAiGenerated: false,
       });
     }
 
-    let parsed: any;
+    let parsed: any = null;
     try {
       const cleanJson = candidateText
         .replace(/^```json\s*/i, "")
@@ -810,14 +812,34 @@ Return ONLY a valid JSON object matching this schema:
         .replace(/```$/i, "")
         .trim();
       parsed = JSON.parse(cleanJson);
-    } catch (parseErr) {
-      console.warn("Direct JSON.parse failed, extracting with regex:", parseErr);
+    } catch {
       const match = candidateText.match(/\{[\s\S]*\}/);
       if (match) {
-        parsed = JSON.parse(match[0]);
-      } else {
-        throw parseErr;
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch {
+          parsed = null;
+        }
       }
+    }
+
+    // Extract verbatim transcript text
+    const verbatimText =
+      (Array.isArray(parsed?.transcript) && parsed.transcript[0]?.text)
+        ? parsed.transcript[0].text
+        : (typeof parsed?.transcript === "string" ? parsed.transcript : candidateText);
+
+    // If Gemini returned plain verbatim text (transcription-only or unparsed JSON),
+    // calculate clinical concepts locally using the real transcript
+    if (!parsed || !Array.isArray(parsed.concepts)) {
+      console.log("Gemini returned verbatim transcript text, computing rubric scores locally:", verbatimText);
+      return evaluateSpokenTranscriptLocal({
+        spokenTranscript: verbatimText,
+        campaign,
+        pitch,
+        rubric,
+        isAiGenerated: true,
+      });
     }
 
     // Concept detections returned by AI
@@ -846,23 +868,24 @@ Return ONLY a valid JSON object matching this schema:
       confidenceScore,
     });
 
+    const finalTurns: TranscriptTurn[] = Array.isArray(parsed.transcript) && parsed.transcript.length > 0
+      ? parsed.transcript.map((t: any, idx: number) => ({
+          id: t.id || `turn-${idx + 1}`,
+          speaker: t.speaker || "tm",
+          speakerLabel: t.speakerLabel || "Territory Manager (You)",
+          text: t.text || verbatimText,
+        }))
+      : [
+          {
+            id: "turn-1",
+            speaker: "tm",
+            speakerLabel: "Territory Manager (You)",
+            text: verbatimText,
+          },
+        ];
+
     return {
-      transcript:
-        Array.isArray(parsed.transcript) && parsed.transcript.length > 0
-          ? parsed.transcript.map((t: any, idx: number) => ({
-              id: t.id || `turn-${idx + 1}`,
-              speaker: t.speaker || "tm",
-              speakerLabel: t.speakerLabel || "Territory Manager (You)",
-              text: t.text || "",
-            }))
-          : [
-              {
-                id: "turn-1",
-                speaker: "tm",
-                speakerLabel: "Territory Manager (You)",
-                text: spokenTranscript || "Audio recording submitted.",
-              },
-            ],
+      transcript: finalTurns,
       accuracy: calc.accuracy,
       adherence: calc.adherence,
       score: calc.weightedScore,
@@ -888,13 +911,15 @@ Return ONLY a valid JSON object matching this schema:
         : undefined,
       isAiGenerated: true,
     };
-  } catch (error) {
-    console.warn("Gemini evaluation encountered an exception, using local speech evaluation:", error);
+  } catch (error: any) {
+    console.error("Gemini evaluation encountered an exception:", error);
     return evaluateSpokenTranscriptLocal({
       spokenTranscript: spokenTranscript || "",
       campaign,
       pitch,
       rubric,
+      errorMessage: error?.message || String(error),
+      isAiGenerated: false,
     });
   }
 }

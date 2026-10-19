@@ -3,25 +3,32 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  AlertCircle,
   CheckCircle2,
   Clock,
+  Key,
   Mic,
   Pause,
+  Pencil,
   Play,
   RotateCcw,
   Sparkles,
   Square,
   UploadCloud,
+  FileText,
+  Volume2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { InputContextBar } from "@/components/tm/InputContextBar";
 import { Button } from "@/components/ui/button";
+import { AiConfigModal } from "@/components/practice/AiConfigModal";
 import { practiceContext } from "@/data/tm";
 import { formatClock } from "@/utils/format";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { uploadPracticeAudio } from "@/services/storage";
 import { savePracticeAttempt } from "@/services/practice";
+import { isGeminiConfigured } from "@/services/ai";
 import type { RecordingState } from "@/types";
 
 export const Route = createFileRoute("/practice/$campaignId/record")({
@@ -45,6 +52,9 @@ export const Route = createFileRoute("/practice/$campaignId/record")({
   component: RecordPracticePage,
 });
 
+const SAMPLE_PITCH =
+  "Good morning Doctor, thank you for your time. I would like to share the latest clinical data on CardioCare A for your patients with uncontrolled hypertension. CardioCare A demonstrates significant 24-hour ambulatory blood pressure reduction with proven cardiorenal protection. With once-daily dosing, it offers high patient adherence and an excellent tolerability profile. Doctor, may I request you to consider CardioCare A for your next hypertensive patients?";
+
 function RecordPracticePage() {
   const { campaignId } = Route.useParams();
   const navigate = useNavigate();
@@ -57,6 +67,14 @@ function RecordPracticePage() {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [geminiActive, setGeminiActive] = useState(false);
+
+  // Live Speech Recognition State
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [isEditingTranscript, setIsEditingTranscript] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const isRecordingRef = useRef(false);
 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -64,6 +82,10 @@ function RecordPracticePage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const playbackUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setGeminiActive(isGeminiConfigured());
+  }, []);
 
   // Timer while recording
   useEffect(() => {
@@ -74,9 +96,16 @@ function RecordPracticePage() {
     };
   }, [state]);
 
-  // Clean up streams and players only on unmount
+  // Clean up streams, speech recognition and players only on unmount
   useEffect(() => {
     return () => {
+      isRecordingRef.current = false;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+        recognitionRef.current = null;
+      }
       if (audioStreamRef.current) {
         audioStreamRef.current.getTracks().forEach((track) => track.stop());
       }
@@ -142,6 +171,53 @@ function RecordPracticePage() {
       mediaRecorderRef.current = recorder;
       recorder.start(250);
 
+      // Start Web Speech API Real-Time Transcription
+      isRecordingRef.current = true;
+      const SpeechRecognition =
+        typeof window !== "undefined"
+          ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+          : null;
+
+      if (SpeechRecognition) {
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = "en-US";
+
+          recognition.onresult = (event: any) => {
+            let fullText = "";
+            for (let i = 0; i < event.results.length; i++) {
+              fullText += event.results[i][0].transcript + " ";
+            }
+            const clean = fullText.trim();
+            if (clean) {
+              setLiveTranscript(clean);
+            }
+          };
+
+          recognition.onerror = (event: any) => {
+            console.warn("Speech recognition notice:", event.error);
+            if (event.error === "network") {
+              console.info("Browser speech network service unavailable; click 'Use Sample Detailing Pitch' to proceed.");
+            }
+          };
+
+          recognition.onend = () => {
+            if (isRecordingRef.current) {
+              try {
+                recognition.start();
+              } catch {}
+            }
+          };
+
+          recognition.start();
+          recognitionRef.current = recognition;
+        } catch (speechErr) {
+          console.warn("Web Speech API error:", speechErr);
+        }
+      }
+
       setState("recording");
       setSeconds(0);
       toast.info("Microphone connected — recording live detailing audio");
@@ -152,6 +228,13 @@ function RecordPracticePage() {
   };
 
   const stopRecording = () => {
+    isRecordingRef.current = false;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
@@ -160,7 +243,7 @@ function RecordPracticePage() {
       audioStreamRef.current = null;
     }
     setState("stopped");
-    toast.success("Recording complete! You can listen back or review your speech below.");
+    toast.success("Recording complete! Review your speech transcript below.");
   };
 
   const toggleRecording = () => {
@@ -206,6 +289,13 @@ function RecordPracticePage() {
   };
 
   const handleReset = () => {
+    isRecordingRef.current = false;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+      recognitionRef.current = null;
+    }
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current = null;
@@ -216,14 +306,38 @@ function RecordPracticePage() {
     }
     setRecordedBlob(null);
     setPlaybackUrl(null);
+    setLiveTranscript("");
     setIsPlaying(false);
     setState("idle");
     setSeconds(0);
   };
 
+  const handleInsertSamplePitch = () => {
+    setLiveTranscript(SAMPLE_PITCH);
+    toast.success("Sample detailing pitch loaded into transcript!");
+  };
+
   const hasTake = state === "stopped" || recordedBlob !== null;
 
   const submit = async () => {
+    const transcriptToSubmit = liveTranscript.trim();
+    const hasAudio = recordedBlob !== null && recordedBlob.size > 200;
+
+    // Only block if NEITHER audio nor speech transcript was captured
+    if (!transcriptToSubmit && !hasAudio) {
+      toast.warning(
+        "No audio or speech was recorded. Please click 'Start Practice' and speak, or click 'Use Sample Detailing Pitch' below.",
+        {
+          duration: 5000,
+          action: {
+            label: "Insert Sample Pitch",
+            onClick: handleInsertSamplePitch,
+          },
+        }
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       let finalAudioUrl = playbackUrl || "";
@@ -244,7 +358,7 @@ function RecordPracticePage() {
         );
       }
 
-      toast.loading("Analyzing detailing audio against campaign rubric...", {
+      toast.loading("Analyzing detailing speech against campaign rubric...", {
         id: "ai-eval",
       });
 
@@ -255,6 +369,7 @@ function RecordPracticePage() {
         durationSeconds: seconds || 15,
         audioUrl: finalAudioUrl,
         audioBlob: recordedBlob ?? undefined,
+        spokenTranscript: transcriptToSubmit,
       });
 
       await queryClient.invalidateQueries();
@@ -280,14 +395,26 @@ function RecordPracticePage() {
           month={practiceContext.month}
           visit={practiceContext.visit}
         />
-        <header>
-          <p className="text-lg font-extrabold uppercase tracking-wide text-brand-red">
-            {practiceContext.brand}
-          </p>
-          <h1 className="mt-1 text-3xl font-extrabold text-navy sm:text-4xl">
-            {practiceContext.inputTitle}
-          </h1>
-          <p className="mt-1 text-base font-bold text-primary">Practice Your Detailing</p>
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-lg font-extrabold uppercase tracking-wide text-brand-red">
+              {practiceContext.brand}
+            </p>
+            <h1 className="mt-1 text-3xl font-extrabold text-navy sm:text-4xl">
+              {practiceContext.inputTitle}
+            </h1>
+            <p className="mt-1 text-base font-bold text-primary">Practice Your Detailing</p>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAiModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+          >
+            <Key className="size-3.5 text-primary" />
+            <span>AI Key: {geminiActive ? "Gemini Active" : "Browser Mode"}</span>
+          </Button>
         </header>
 
         <div className="grid gap-5 lg:grid-cols-12">
@@ -382,6 +509,103 @@ function RecordPracticePage() {
             </Button>
           </div>
 
+          {/* Real-Time Live Speech Transcription Panel */}
+          <div className="mt-6 rounded-2xl border border-border bg-surface-2 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="size-4 text-primary" />
+                <span className="text-xs font-bold uppercase tracking-wider text-navy">
+                  Speech Transcription Preview
+                </span>
+                {state === "recording" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                    <span className="size-2 animate-ping rounded-full bg-primary" />
+                    Listening live...
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {liveTranscript && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTranscript(!isEditingTranscript)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    <Pencil className="size-3" />
+                    {isEditingTranscript ? "Done Editing" : "Edit Words"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleInsertSamplePitch}
+                  className="text-xs font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"
+                  title="Insert approved pitch text to test scoring"
+                >
+                  <Sparkles className="size-3" />
+                  Use Sample Detailing Pitch
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              {isEditingTranscript ? (
+                <textarea
+                  rows={4}
+                  value={liveTranscript}
+                  onChange={(e) => setLiveTranscript(e.target.value)}
+                  placeholder="Type or edit your detailing speech transcript..."
+                  className="w-full rounded-xl border border-border bg-card p-3 text-sm text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              ) : liveTranscript ? (
+                <p className="text-sm leading-relaxed text-navy italic">
+                  “{liveTranscript}”
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  {state === "recording"
+                    ? "Speak into your microphone — your words will appear here in real time."
+                    : "Press 'Start Practice' and speak, or click 'Use Sample Detailing Pitch' to test."}
+                </p>
+              )}
+            </div>
+
+            {/* Missing Speech Banner */}
+            {!liveTranscript && hasTake && (
+              <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-navy">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="size-4 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-navy">
+                        {geminiActive ? "Audio recorded successfully." : "Microphone audio captured."}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5 text-[11px]">
+                        {geminiActive
+                          ? "Gemini Multimodal AI is active and will transcribe your recording directly upon submission."
+                          : "Click 'Insert Sample Detailing Pitch' to test the full clinical assessment and scoring immediately."}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleInsertSamplePitch}
+                    className="bg-primary text-white hover:bg-primary/90 text-xs font-bold cursor-pointer"
+                  >
+                    <Sparkles className="size-3.5" /> Insert Sample Detailing Pitch
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {liveTranscript && (
+              <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground border-t border-border/60 pt-2">
+                <span>{liveTranscript.split(/\s+/).filter(Boolean).length} words recognized</span>
+                <span className="text-primary font-medium">✓ Will be evaluated against clinical rubric</span>
+              </div>
+            )}
+          </div>
+
           <div className="mt-6 border-t border-border pt-5">
             <p className="flex items-center justify-center gap-2 text-sm font-semibold text-primary">
               <Sparkles className="size-4" />
@@ -390,7 +614,10 @@ function RecordPracticePage() {
 
             {playbackUrl && (
               <div className="mt-4 rounded-xl border border-border bg-white p-3 flex flex-col sm:flex-row items-center gap-3">
-                <span className="text-xs font-bold text-navy whitespace-nowrap">Your Recorded Audio:</span>
+                <span className="text-xs font-bold text-navy whitespace-nowrap flex items-center gap-1.5">
+                  <Volume2 className="size-4 text-primary" />
+                  Recorded Audio:
+                </span>
                 <audio
                   key={playbackUrl}
                   controls
@@ -430,7 +657,7 @@ function RecordPracticePage() {
                 ) : (
                   <Sparkles className="size-4" />
                 )}
-                {submitting ? "Analyzing Audio..." : "Submit for AI Assessment"}
+                {submitting ? "Analyzing Detailing..." : "Submit for AI Assessment"}
               </Button>
             </div>
             <p className="mt-3 text-center text-xs text-muted-foreground">
@@ -439,6 +666,12 @@ function RecordPracticePage() {
           </div>
         </section>
       </div>
+
+      <AiConfigModal
+        open={aiModalOpen}
+        onOpenChange={setAiModalOpen}
+        onConfigChanged={() => setGeminiActive(isGeminiConfigured())}
+      />
     </AppShell>
   );
 }

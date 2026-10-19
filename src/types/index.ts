@@ -34,6 +34,9 @@ export type VocabularyRiskTag =
 
 export interface VocabularyTag {
   id: string;
+  no?: number;
+  termEnteredByUser?: string;
+  standardTerm?: string;
   therapyArea: string;          // 'Cardiology' | 'Diabetes' | 'Respiratory' | 'All'
   category: string;             // 'Disease' | 'Safety' | 'Dosing' | 'Evidence' etc.
   intentTag: string;            // 'General medical' | 'Efficacy' | 'Safety' etc.

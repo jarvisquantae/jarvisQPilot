@@ -18,6 +18,29 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
+import { executeGeminiEvaluation, type GeminiProxyPayload } from "./server/gemini-proxy";
+
+async function handleGeminiApiProxy(request: Request, env: unknown): Promise<Response> {
+  try {
+    const body = (await request.json()) as GeminiProxyPayload;
+    const serverKey = (env as any)?.GEMINI_API_KEY || (env as any)?.VITE_GEMINI_API_KEY;
+    const outcome = await executeGeminiEvaluation(body, serverKey);
+
+    return new Response(
+      JSON.stringify(outcome.data || { error: outcome.error, diagnostics: outcome.diagnostics }),
+      {
+        status: outcome.status,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err?.message || "Server error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
 // h3 swallows in-handler throws into a normal 500 Response with body
 // {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
 async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
@@ -52,6 +75,11 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (request.method === "POST" && url.pathname === "/api/gemini/evaluate") {
+        return await handleGeminiApiProxy(request, env);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

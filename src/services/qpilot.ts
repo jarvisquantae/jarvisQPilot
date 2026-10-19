@@ -6,6 +6,7 @@
  */
 
 import * as mock from "@/data/mock";
+import { getVocabularyTagsByTherapyArea } from "@/data/vocabulary-tags";
 import { isMockFallbackEnabled, supabase } from "@/lib/supabase";
 import type {
   AiSuggestion,
@@ -37,12 +38,15 @@ const delay = (ms = 260) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function getVocabularyTags(
   therapyArea?: string,
 ): Promise<VocabularyTag[]> {
-  if (isMockFallbackEnabled()) return [];
+  if (isMockFallbackEnabled()) {
+    return getVocabularyTagsByTherapyArea(therapyArea);
+  }
 
   try {
     let query = supabase
       .from("vocabulary_tags")
       .select("*")
+      .order("tag_no",       { ascending: true, nullsFirst: false })
       .order("therapy_area", { ascending: true })
       .order("risk_tag",     { ascending: true });
 
@@ -52,23 +56,28 @@ export async function getVocabularyTags(
     }
 
     const { data, error } = await query;
-    if (error || !data) return [];
+    if (error || !data || data.length === 0) {
+      return getVocabularyTagsByTherapyArea(therapyArea);
+    }
 
     return data.map((row) => ({
-      id:             row.id,
-      therapyArea:    row.therapy_area,
-      category:       row.category,
-      intentTag:      row.intent_tag,
-      riskTag:        row.risk_tag as VocabularyRiskTag,
-      synonymGroup:   row.synonym_group,
-      spokenVariants: row.spoken_variants ?? [],
-      status:         row.status,
-      reviewer:       row.reviewer,
-      sourceBasis:    row.source_basis,
-      notes:          row.notes ?? undefined,
+      id:                row.id,
+      no:                row.tag_no ?? undefined,
+      termEnteredByUser: row.term_entered_by_user ?? undefined,
+      standardTerm:      row.standard_term ?? undefined,
+      therapyArea:       row.therapy_area,
+      category:          row.category,
+      intentTag:         row.intent_tag,
+      riskTag:           row.risk_tag as VocabularyRiskTag,
+      synonymGroup:      row.synonym_group,
+      spokenVariants:    row.spoken_variants ?? [],
+      status:            row.status,
+      reviewer:          row.reviewer,
+      sourceBasis:       row.source_basis,
+      notes:             row.notes ?? undefined,
     }));
   } catch {
-    return [];
+    return getVocabularyTagsByTherapyArea(therapyArea);
   }
 }
 

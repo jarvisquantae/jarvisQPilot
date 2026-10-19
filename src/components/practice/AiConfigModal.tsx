@@ -119,14 +119,14 @@ export function AiConfigModal({
               <Key className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
               <Input
                 type="password"
-                placeholder="AIzaSy..."
+                placeholder="AQ.YourKey... or AIzaSy..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="pl-9 text-xs font-mono"
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Free tier includes generous RPM limits and requires no credit card.
+              Supports modern Google AI Studio keys (AQ...) and legacy Google Cloud keys. Free tier requires no credit card.
             </p>
           </div>
         </div>

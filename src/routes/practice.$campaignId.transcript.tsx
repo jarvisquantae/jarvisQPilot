@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { ArrowRight, BadgeCheck, Check, FileText } from "lucide-react";
+import { AlertCircle, ArrowRight, BadgeCheck, Check, FileText, RotateCcw } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader, SectionCard } from "@/components/common/Layout";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -47,6 +47,14 @@ function TranscriptPage() {
   const { data: transcript } = useSuspenseQuery(transcriptQuery(campaignId));
   const [confirmed, setConfirmed] = useState(false);
 
+  const transcriptText = transcript.turns?.map((t) => t.text).join(" ") || "";
+  const hasEvaluationError = transcriptText.includes("[Evaluation Error:");
+  const hasNoSpeechError =
+    transcriptText.includes("[No clear speech detected") ||
+    transcriptText.includes("[No speech detected]");
+  const hasError = hasEvaluationError || hasNoSpeechError || !transcriptText.trim();
+  const isValidTranscript = !hasError && transcriptText.length > 5;
+
   return (
     <AppShell>
       <div className="space-y-6">
@@ -63,9 +71,15 @@ function TranscriptPage() {
             <>
               <span className="text-sm font-bold text-navy">{campaign.productName}</span>
               <StatusBadge
-                label={confirmed ? "Transcript Confirmed" : "AI Transcription Complete"}
-                tone={confirmed ? "success" : "ai"}
-                icon={<BadgeCheck className="size-3.5" />}
+                label={
+                  hasError
+                    ? "Transcription Error"
+                    : confirmed
+                    ? "Transcript Confirmed"
+                    : "AI Transcription Complete"
+                }
+                tone={hasError ? "danger" : confirmed ? "success" : "ai"}
+                icon={hasError ? <AlertCircle className="size-3.5" /> : <BadgeCheck className="size-3.5" />}
               />
             </>
           }
@@ -77,6 +91,34 @@ function TranscriptPage() {
         />
 
         <div className="mx-auto w-full max-w-3xl space-y-4">
+          {hasError && (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="size-5 shrink-0 mt-0.5 text-destructive" />
+                <div className="space-y-1">
+                  <p className="font-bold text-destructive">
+                    {hasEvaluationError
+                      ? "Action Required: Upstream Gemini API Error"
+                      : "Action Required: No Clear Speech Detected"}
+                  </p>
+                  <p className="text-xs leading-relaxed text-destructive/90">
+                    {hasEvaluationError
+                      ? "The speech transcription service returned an error. Review the error details in the transcript below or re-record your pitch."
+                      : "The audio recording did not contain recognizable speech. Check your microphone permissions, ensure sufficient volume, and record again."}
+                  </p>
+                  <div className="pt-2">
+                    <Button asChild size="sm" variant="destructive">
+                      <Link to="/practice/$campaignId/record" params={{ campaignId }}>
+                        <RotateCcw className="size-3.5 mr-1.5" />
+                        Re-record Detailing Pitch
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <SectionCard
             title="AI Transcript"
             subtitle="Read-only record of your submitted detailing."
@@ -86,14 +128,22 @@ function TranscriptPage() {
           </SectionCard>
 
           <div className="flex flex-wrap gap-2.5">
-            <Button variant={confirmed ? "outline" : "default"} onClick={() => setConfirmed(true)}>
+            <Button
+              variant={confirmed ? "outline" : "default"}
+              onClick={() => setConfirmed(true)}
+              disabled={!isValidTranscript || confirmed}
+            >
               <Check className="size-4" />
-              {confirmed ? "Transcript confirmed" : "Confirm Transcript"}
+              {confirmed
+                ? "Transcript confirmed"
+                : isValidTranscript
+                ? "Confirm Transcript"
+                : "Cannot Confirm (No Valid Speech)"}
             </Button>
             <Button
               variant="navy"
               onClick={() => navigate({ to: "/results/$campaignId/latest", params: { campaignId } })}
-              disabled={!confirmed}
+              disabled={!confirmed || !isValidTranscript}
             >
               Continue to Assessment
               <ArrowRight className="size-4" />
@@ -104,11 +154,15 @@ function TranscriptPage() {
               </Link>
             </Button>
           </div>
-          {!confirmed && (
+          {!isValidTranscript ? (
+            <p className="text-xs font-semibold text-destructive">
+              Assessment calculation remains disabled until a valid speech transcript is recorded and confirmed.
+            </p>
+          ) : !confirmed ? (
             <p className="text-xs text-muted-foreground">
               Transcript confirmation is required before an assessment is calculated.
             </p>
-          )}
+          ) : null}
         </div>
       </div>
     </AppShell>

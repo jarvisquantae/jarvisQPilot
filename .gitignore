@@ -35,3 +35,6 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Media & Video Generation Output
+brag-output/
