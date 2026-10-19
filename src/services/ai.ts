@@ -8,6 +8,7 @@ import type {
   TranscriptTurn,
   ConceptDetection,
   ReadinessStatus,
+  VocabularyTag,
 } from "@/types";
 
 export interface GeminiAssessmentResult {
@@ -56,35 +57,46 @@ export const isGeminiConfigured = (): boolean => {
 };
 
 /**
- * Builds vocabulary hints for campaign transcription accuracy per Rule 8
+ * Builds vocabulary hints for campaign transcription accuracy.
+ * Ingests terminology from:
+ *   1. Supabase vocabulary_tags table (Vocabulary Tags.xlsx → DB)
+ *   2. Campaign & pitch metadata
+ *   3. Assessment rubric approved synonyms & mandatory messages
+ *
+ * Risk Tag → Hint Classification:
+ *   No-risk / Caution    → inject as phonetic hints (model learns to recognise)
+ *   High-risk / AE flag  → inject as hints + mark for model caution
+ *   Block                → inject as prohibited terms (model must flag if spoken)
+ *   Urgent PV / PV flags → inject as high-severity detection terms
  */
 export function buildVocabularyHints(
   campaign?: Campaign,
   pitch?: Pitch,
   rubric?: AssessmentRubric,
+  vocabularyTags?: VocabularyTag[],
 ): string[] {
   const hints = new Set<string>();
+
+  // ── Campaign & pitch core metadata ─────────────────────────────────────────
   if (campaign?.productName) hints.add(campaign.productName);
   if (campaign?.title) hints.add(campaign.title);
+
+  // ── Static baseline pharma vocabulary ──────────────────────────────────────
   hints.add("Hypertension");
   hints.add("High BP");
-  hints.add("BP control");
   hints.add("Blood pressure");
   hints.add("Systolic");
   hints.add("Diastolic");
   hints.add("CardioCare");
-  hints.add("CardioVia");
   hints.add("Renal protection");
   hints.add("Once daily");
   hints.add("Once-daily dosing");
   hints.add("Tolerability");
   hints.add("Safety profile");
   hints.add("LBL");
-  hints.add("Reminder Card");
   hints.add("Adherence");
-  hints.add("Starter pack");
-  hints.add("Patient trial");
 
+  // ── Rubric-sourced mandatory messages and approved synonyms ─────────────────
   if (rubric?.mandatoryMessages) {
     rubric.mandatoryMessages.forEach((m) => hints.add(m));
   }
@@ -94,8 +106,70 @@ export function buildVocabularyHints(
       hints.add(s.approved);
     });
   }
+
+  // ── Vocabulary Tags from Supabase (Vocabulary Tags.xlsx → DB) ──────────────
+  if (vocabularyTags && vocabularyTags.length > 0) {
+    for (const tag of vocabularyTags) {
+      // Always add the canonical synonym group as a hint
+      hints.add(tag.synonymGroup.replace(/_/g, " "));
+
+      // Add all spoken variants so the model phonetically recognises them
+      if (tag.spokenVariants) {
+        for (const variant of tag.spokenVariants) {
+          hints.add(variant);
+        }
+      }
+    }
+  }
+
   return Array.from(hints);
 }
+
+/**
+ * Derives prohibited claim terms and high-risk detection flags from
+ * the vocabulary_tags table rows that carry dangerous risk classifications.
+ * Used to populate the compliance section of the Gemini prompt.
+ */
+export function buildProhibitedTermsFromTags(vocabularyTags?: VocabularyTag[]): {
+  prohibitedTerms: string[];
+  urgentPVTerms: string[];
+  aeTerms: string[];
+  cautionTerms: string[];
+} {
+  const prohibitedTerms: string[] = [];
+  const urgentPVTerms: string[] = [];
+  const aeTerms: string[] = [];
+  const cautionTerms: string[] = [];
+
+  if (!vocabularyTags) return { prohibitedTerms, urgentPVTerms, aeTerms, cautionTerms };
+
+  for (const tag of vocabularyTags) {
+    const variants = [tag.synonymGroup.replace(/_/g, " "), ...(tag.spokenVariants ?? [])];
+    switch (tag.riskTag) {
+      case "Block":
+        prohibitedTerms.push(...variants);
+        break;
+      case "Urgent PV flag":
+      case "PV flag":
+      case "PV/Quality flag":
+        urgentPVTerms.push(...variants);
+        break;
+      case "AE flag":
+      case "High-risk":
+        aeTerms.push(...variants);
+        break;
+      case "Caution":
+        cautionTerms.push(...variants);
+        break;
+      default:
+        // No-risk: vocabulary hints only, handled in buildVocabularyHints
+        break;
+    }
+  }
+
+  return { prohibitedTerms, urgentPVTerms, aeTerms, cautionTerms };
+}
+
 
 /**
  * Core Application Scoring Engine:

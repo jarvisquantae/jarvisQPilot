@@ -7,6 +7,47 @@
 
 export type UserRole = "TM" | "SM" | "MM" | "ADMIN";
 
+/**
+ * Pharmaceutical Vocabulary Tag
+ * Sourced from Vocabulary Tags.xlsx. Each row defines a canonical clinical term,
+ * its risk classification, and spoken variants the model should recognise.
+ *
+ * Risk Tag → Scoring / Compliance Action:
+ *   Block           → Prohibited: -25pt penalty + requires_human_review = true
+ *   Urgent PV flag  → Pharmacovigilance: requires_human_review = true, alert SM
+ *   PV flag         → Pharmacovigilance: route to supervisor review queue
+ *   PV/Quality flag → Quality + PV: route to supervisor review queue
+ *   High-risk       → Caution warning, potential review trigger
+ *   AE flag         → Adverse Event: flag for human review
+ *   Caution         → Soft coaching note, no score penalty
+ *   No-risk         → Inject as vocabulary hint only
+ */
+export type VocabularyRiskTag =
+  | "No-risk"
+  | "Caution"
+  | "High-risk"
+  | "AE flag"
+  | "Block"
+  | "Urgent PV flag"
+  | "PV flag"
+  | "PV/Quality flag";
+
+export interface VocabularyTag {
+  id: string;
+  therapyArea: string;          // 'Cardiology' | 'Diabetes' | 'Respiratory' | 'All'
+  category: string;             // 'Disease' | 'Safety' | 'Dosing' | 'Evidence' etc.
+  intentTag: string;            // 'General medical' | 'Efficacy' | 'Safety' etc.
+  riskTag: VocabularyRiskTag;
+  synonymGroup: string;         // Canonical form: 'ADVERSE_EVENT', 'HYPERTENSION'
+  spokenVariants: string[];     // Natural-language variants: ['high blood pressure', ...]
+  status: string;
+  reviewer: string;
+  sourceBasis: string;
+  notes?: string;
+}
+
+
+
 export interface User {
   id: string;
   name: string;

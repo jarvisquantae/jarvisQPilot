@@ -22,9 +22,57 @@ import type {
   PromotionalInput,
   Transcript,
   User,
+  VocabularyTag,
+  VocabularyRiskTag,
 } from "@/types";
 
 const delay = (ms = 260) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Fetches pharmaceutical vocabulary tags from Supabase.
+ * Optionally filtered by therapy area (e.g. 'Cardiology', 'Diabetes', 'All').
+ * Falls back to an empty array if Supabase is unavailable — the scoring engine
+ * continues to work with rubric-sourced terms in that case.
+ */
+export async function getVocabularyTags(
+  therapyArea?: string,
+): Promise<VocabularyTag[]> {
+  if (isMockFallbackEnabled()) return [];
+
+  try {
+    let query = supabase
+      .from("vocabulary_tags")
+      .select("*")
+      .order("therapy_area", { ascending: true })
+      .order("risk_tag",     { ascending: true });
+
+    // Always include 'All' tags; add therapy-area-specific tags when provided
+    if (therapyArea && therapyArea !== "All") {
+      query = query.in("therapy_area", [therapyArea, "All"]);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id:             row.id,
+      therapyArea:    row.therapy_area,
+      category:       row.category,
+      intentTag:      row.intent_tag,
+      riskTag:        row.risk_tag as VocabularyRiskTag,
+      synonymGroup:   row.synonym_group,
+      spokenVariants: row.spoken_variants ?? [],
+      status:         row.status,
+      reviewer:       row.reviewer,
+      sourceBasis:    row.source_basis,
+      notes:          row.notes ?? undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+
 
 export async function getCurrentUser(): Promise<User> {
   if (isMockFallbackEnabled()) {
