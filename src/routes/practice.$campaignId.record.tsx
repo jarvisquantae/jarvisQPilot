@@ -6,7 +6,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Key,
   Mic,
   Pause,
   Pencil,
@@ -21,14 +20,12 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { InputContextBar } from "@/components/tm/InputContextBar";
 import { Button } from "@/components/ui/button";
-import { AiConfigModal } from "@/components/practice/AiConfigModal";
 import { practiceContext } from "@/data/tm";
 import { formatClock } from "@/utils/format";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { uploadPracticeAudio } from "@/services/storage";
 import { savePracticeAttempt } from "@/services/practice";
-import { isGeminiConfigured } from "@/services/ai";
 import type { RecordingState } from "@/types";
 
 export const Route = createFileRoute("/practice/$campaignId/record")({
@@ -67,8 +64,6 @@ function RecordPracticePage() {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [aiModalOpen, setAiModalOpen] = useState(false);
-  const [geminiActive, setGeminiActive] = useState(false);
 
   // Live Speech Recognition State
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -84,11 +79,7 @@ function RecordPracticePage() {
   const playbackUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setGeminiActive(isGeminiConfigured());
-  }, []);
 
-  // Timer while recording
-  useEffect(() => {
     if (state !== "recording") return;
     timer.current = setInterval(() => setSeconds((value) => value + 1), 1000);
     return () => {
@@ -143,7 +134,11 @@ function RecordPracticePage() {
         }
       }
 
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const recorderOptions: MediaRecorderOptions = {
+        audioBitsPerSecond: 32000,
+        ...(mimeType ? { mimeType } : {}),
+      };
+      const recorder = new MediaRecorder(stream, recorderOptions);
 
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -405,16 +400,6 @@ function RecordPracticePage() {
             </h1>
             <p className="mt-1 text-base font-bold text-primary">Practice Your Detailing</p>
           </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAiModalOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
-          >
-            <Key className="size-3.5 text-primary" />
-            <span>AI Key: {geminiActive ? "Gemini Active" : "Browser Mode"}</span>
-          </Button>
         </header>
 
         <div className="grid gap-5 lg:grid-cols-12">
@@ -577,13 +562,9 @@ function RecordPracticePage() {
                   <div className="flex items-start gap-2">
                     <Sparkles className="size-4 text-primary shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-bold text-navy">
-                        {geminiActive ? "Audio recorded successfully." : "Microphone audio captured."}
-                      </p>
+                      <p className="font-bold text-navy">Audio recorded successfully.</p>
                       <p className="text-muted-foreground mt-0.5 text-[11px]">
-                        {geminiActive
-                          ? "Gemini Multimodal AI is active and will transcribe your recording directly upon submission."
-                          : "Click 'Insert Sample Detailing Pitch' to test the full clinical assessment and scoring immediately."}
+                        Gemini Multimodal AI will transcribe your recording directly upon submission.
                       </p>
                     </div>
                   </div>
@@ -667,11 +648,6 @@ function RecordPracticePage() {
         </section>
       </div>
 
-      <AiConfigModal
-        open={aiModalOpen}
-        onOpenChange={setAiModalOpen}
-        onConfigChanged={() => setGeminiActive(isGeminiConfigured())}
-      />
     </AppShell>
   );
 }

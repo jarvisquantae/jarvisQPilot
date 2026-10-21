@@ -39,7 +39,7 @@ export async function getVocabularyTags(
   therapyArea?: string,
 ): Promise<VocabularyTag[]> {
   if (isMockFallbackEnabled()) {
-    return getVocabularyTagsByTherapyArea(therapyArea);
+    return getVocabularyTagsByTherapyArea(therapyArea ?? "All");
   }
 
   try {
@@ -57,7 +57,7 @@ export async function getVocabularyTags(
 
     const { data, error } = await query;
     if (error || !data || data.length === 0) {
-      return getVocabularyTagsByTherapyArea(therapyArea);
+      return getVocabularyTagsByTherapyArea(therapyArea ?? "All");
     }
 
     return data.map((row) => ({
@@ -77,7 +77,7 @@ export async function getVocabularyTags(
       notes:             row.notes ?? undefined,
     }));
   } catch {
-    return getVocabularyTagsByTherapyArea(therapyArea);
+    return getVocabularyTagsByTherapyArea(therapyArea ?? "All");
   }
 }
 
