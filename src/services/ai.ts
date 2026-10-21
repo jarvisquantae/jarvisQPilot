@@ -251,7 +251,12 @@ export function calculateApplicationScores({
   // STATUS SCORE = lower of the two component scores
   const statusScore = Math.min(accuracy, adherence);
 
-  if (accuracy >= 90 && adherence >= 90) {
+  if (hasCriticalClaim) {
+    readiness = "needs_focus";
+    readinessLabel = "Needs Focus";
+    ratingLabel = "Needs Focus";
+    rating = Math.min(statusScore, 50);
+  } else if (accuracy >= 90 && adherence >= 90) {
     readiness = "ready";
     readinessLabel = "Strong";
     ratingLabel = "Strong";

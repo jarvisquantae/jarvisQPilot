@@ -15,8 +15,8 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
     assert.strictEqual(Number(sum.toFixed(2)), 1.0);
   });
 
-  // Scenario 1: Strong, fully compliant performance
-  test("Scenario 1: Strong, fully compliant performance achieves Ready status", () => {
+  // Scenario 1: Strong, fully compliant performance (>=90%)
+  test("Scenario 1: Strong, fully compliant performance achieves Strong status", () => {
     const result = calculateApplicationScores({
       concepts: [
         { id: "mandatory_messages", label: "Mandatory Messages", detected: true, score: 95 },
@@ -31,12 +31,12 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
 
     assert.ok(result.weightedScore >= 90, `Expected score >= 90, got ${result.weightedScore}`);
     assert.strictEqual(result.readiness, "ready");
+    assert.strictEqual(result.readinessLabel, "Strong");
     assert.strictEqual(result.requiresHumanReview, false);
-    assert.ok(result.rating >= 4.8);
   });
 
-  // Scenario 2: Partially complete performance
-  test("Scenario 2: Partially complete performance produces on_track status", () => {
+  // Scenario 2: Partially complete performance (<80%)
+  test("Scenario 2: Partially complete performance (<80%) produces needs_focus status", () => {
     const result = calculateApplicationScores({
       concepts: [
         { id: "mandatory_messages", label: "Mandatory Messages", detected: true, score: 75 },
@@ -50,7 +50,8 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
     });
 
     assert.ok(result.weightedScore >= 70 && result.weightedScore < 80);
-    assert.strictEqual(result.readiness, "on_track");
+    assert.strictEqual(result.readiness, "needs_focus");
+    assert.strictEqual(result.readinessLabel, "Needs Focus");
     assert.strictEqual(result.requiresHumanReview, false);
   });
 
@@ -70,7 +71,7 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
 
     assert.ok(result.weightedScore < 60);
     assert.strictEqual(result.readiness, "needs_focus");
-    assert.strictEqual(result.readinessLabel, "Manager Review Required");
+    assert.strictEqual(result.readinessLabel, "Needs Focus");
   });
 
   // Scenario 4: Missing mandatory message
@@ -87,7 +88,7 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
       prohibitedClaimsDetected: [],
     });
 
-    // Despite high total, mandatoryScore < 60 must prevent readiness === 'ready'
+    // Despite high other scores, accuracy is low and prevents readiness === 'ready'
     assert.notStrictEqual(result.readiness, "ready");
   });
 
@@ -106,7 +107,7 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
     });
 
     assert.strictEqual(result.requiresHumanReview, true);
-    assert.notStrictEqual(result.readiness, "ready");
+    assert.strictEqual(result.readiness, "needs_focus");
     assert.ok(result.reviewRecommendation.includes("Critical Prohibited Claim"));
   });
 
@@ -116,7 +117,8 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
     const evalResult = evaluateSpokenTranscriptLocal({ spokenTranscript: transcript });
 
     assert.ok(evalResult.score >= 80, `Expected score >= 80, got ${evalResult.score}`);
-    assert.strictEqual(evalResult.readiness, "ready");
+    assert.strictEqual(evalResult.readiness, "on_track");
+    assert.strictEqual(evalResult.readinessLabel, "Good");
     assert.strictEqual(evalResult.prohibitedClaimsDetected.length, 0);
   });
 
@@ -154,12 +156,12 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
       rubric: undefined,
     });
     assert.ok(evalResult.score >= 80);
-    assert.strictEqual(evalResult.readiness, "ready");
+    assert.strictEqual(evalResult.readiness, "on_track");
   });
 
   // Scenario 10: Score exactly on readiness boundary (70, 80, 90)
   test("Scenario 10: Scores exactly on readiness boundaries map correctly", () => {
-    // 70 boundary
+    // 70 boundary -> Needs Focus (<80)
     const res70 = calculateApplicationScores({
       concepts: [
         { id: "mandatory_messages", label: "Mandatory Messages", detected: true, score: 70 },
@@ -171,9 +173,10 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
       confidenceScore: 85,
     });
     assert.strictEqual(res70.weightedScore, 70);
-    assert.strictEqual(res70.readiness, "on_track");
+    assert.strictEqual(res70.readiness, "needs_focus");
+    assert.strictEqual(res70.readinessLabel, "Needs Focus");
 
-    // 80 boundary
+    // 80 boundary -> Good (on_track)
     const res80 = calculateApplicationScores({
       concepts: [
         { id: "mandatory_messages", label: "Mandatory Messages", detected: true, score: 80 },
@@ -185,9 +188,10 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
       confidenceScore: 85,
     });
     assert.strictEqual(res80.weightedScore, 80);
-    assert.strictEqual(res80.readiness, "ready");
+    assert.strictEqual(res80.readiness, "on_track");
+    assert.strictEqual(res80.readinessLabel, "Good");
 
-    // 90 boundary
+    // 90 boundary -> Strong (ready)
     const res90 = calculateApplicationScores({
       concepts: [
         { id: "mandatory_messages", label: "Mandatory Messages", detected: true, score: 90 },
@@ -200,6 +204,6 @@ describe("Scoring Engine Specification & Synthetic Scenarios", () => {
     });
     assert.strictEqual(res90.weightedScore, 90);
     assert.strictEqual(res90.readiness, "ready");
-    assert.strictEqual(res90.readinessLabel, "Ready for Field Execution");
+    assert.strictEqual(res90.readinessLabel, "Strong");
   });
 });
