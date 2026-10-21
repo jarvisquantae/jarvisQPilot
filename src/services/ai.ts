@@ -242,39 +242,30 @@ export function calculateApplicationScores({
     adherenceScore * 0.50 + inputScore * 0.25 + closingScore * 0.25,
   );
 
-  // Readiness scale strictly per AI Product Brief Section 9:
+  // Readiness scale: Strong / Good / Needs Focus based on accuracy & adherence
   let readiness: ReadinessStatus;
   let readinessLabel: string;
   let ratingLabel: string;
   let rating: number;
 
-  const qualifiesForField = !hasCriticalClaim && mandatoryScore >= 60;
+  // STATUS SCORE = lower of the two component scores
+  const statusScore = Math.min(accuracy, adherence);
 
-  if (weightedScore >= 90 && qualifiesForField) {
+  if (accuracy >= 90 && adherence >= 90) {
     readiness = "ready";
-    readinessLabel = "Ready for Field Execution";
-    ratingLabel = "Excellent";
-    rating = Number((4.8 + ((weightedScore - 90) / 10) * 0.2).toFixed(1));
-  } else if (weightedScore >= 80 && qualifiesForField) {
-    readiness = "ready";
-    readinessLabel = "Ready (Very Good)";
-    ratingLabel = "Very Good";
-    rating = Number((4.2 + ((weightedScore - 80) / 10) * 0.5).toFixed(1));
-  } else if (weightedScore >= 70 && !hasCriticalClaim) {
+    readinessLabel = "Strong";
+    ratingLabel = "Strong";
+    rating = statusScore;
+  } else if (accuracy >= 80 && adherence >= 80) {
     readiness = "on_track";
-    readinessLabel = "Nearly Ready";
+    readinessLabel = "Good";
     ratingLabel = "Good";
-    rating = Number((3.6 + ((weightedScore - 70) / 10) * 0.5).toFixed(1));
-  } else if (weightedScore >= 60) {
-    readiness = "needs_focus";
-    readinessLabel = "Practice Recommended";
-    ratingLabel = "Developing";
-    rating = Number((3.0 + ((weightedScore - 60) / 10) * 0.5).toFixed(1));
+    rating = statusScore;
   } else {
     readiness = "needs_focus";
-    readinessLabel = "Manager Review Required";
-    ratingLabel = "Needs Support";
-    rating = Number(Math.max(1.5, (weightedScore / 60) * 2.9).toFixed(1));
+    readinessLabel = "Needs Focus";
+    ratingLabel = "Needs Focus";
+    rating = statusScore;
   }
 
   // Confidence thresholds strictly per Error Reduction Guide Rule 9:
@@ -772,7 +763,44 @@ Return ONLY a valid JSON object matching this schema:
     }
 
     if (!response || !response.ok) {
-      console.error("Gemini proxy assessment failed, preserving real error:", lastError);
+      // 2. Resilient fallback: If proxy is unavailable or severed, attempt direct Google API call with apiKey
+      if (apiKey) {
+        console.info("Server proxy did not respond, attempting resilient direct dispatch to Gemini 3.8 Flash...");
+        try {
+          const directEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+          const directRes = await fetch(directEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    ...(base64Audio ? [{ inlineData: { mimeType, data: base64Audio } }] : []),
+                    { text: prompt },
+                  ],
+                },
+              ],
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.2,
+                thinkingConfig: { thinkingBudget: 0 },
+              },
+            }),
+          });
+          if (directRes.ok) {
+            response = directRes;
+          } else {
+            const directErr = await directRes.text().catch(() => `HTTP ${directRes.status}`);
+            lastError = `Proxy failed (${lastError}); Direct API failed: ${directErr}`;
+          }
+        } catch (directErr: any) {
+          lastError = `Proxy failed (${lastError}); Direct API error: ${directErr?.message || "network error"}`;
+        }
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.error("Gemini assessment failed, preserving real error:", lastError);
       return evaluateSpokenTranscriptLocal({
         spokenTranscript: spokenTranscript || "",
         campaign,

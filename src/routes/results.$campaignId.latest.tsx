@@ -217,17 +217,11 @@ function AssessmentPage() {
               />
             </div>
 
-            <div className="mt-6 flex items-center justify-between border-t border-border pt-5">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Readiness Status
-                </p>
-                <p className="mt-0.5 text-base font-extrabold text-navy">{readinessLabel}</p>
-              </div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-bold text-primary">
-                <span className="size-2 rounded-full bg-primary" />
-                {assessment?.rating ? `${assessment.rating} / 5.0 Rating` : "Evaluated"}
-              </span>
+            <div className="mt-6 border-t border-border pt-5">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Readiness Status
+              </p>
+              <p className="mt-0.5 text-base font-extrabold text-navy">{readinessLabel}</p>
             </div>
           </section>
 
