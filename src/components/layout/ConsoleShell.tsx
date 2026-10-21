@@ -105,9 +105,9 @@ export function ConsoleShell({
   return (
     <div className="flex min-h-screen w-full bg-background">
       <aside className="sticky top-0 hidden h-screen w-[16.5rem] shrink-0 flex-col bg-navy px-3.5 py-6 lg:flex">
-        <div className="px-2">
+        <Link to="/" className="block px-2 focus-visible:outline-none transition-opacity hover:opacity-85">
           <QPilotLogo variant="onDark" />
-        </div>
+        </Link>
         <div className="mt-8 flex-1 overflow-y-auto pr-1">
           <ConsoleNav items={navItems} />
         </div>
@@ -123,7 +123,9 @@ export function ConsoleShell({
           />
           <div className="relative flex h-full w-72 flex-col bg-navy px-3.5 py-6">
             <div className="flex items-start justify-between px-2">
-              <QPilotLogo variant="onDark" />
+              <Link to="/" onClick={() => setMobileOpen(false)} className="focus-visible:outline-none transition-opacity hover:opacity-85">
+                <QPilotLogo variant="onDark" />
+              </Link>
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}

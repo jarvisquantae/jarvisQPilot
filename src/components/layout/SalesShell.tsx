@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Menu,
   TrendingUp,
+  Users,
   X,
 } from "lucide-react";
 import { QPilotLogo } from "@/components/brand/QPilotLogo";
@@ -54,6 +55,15 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           </Link>
         );
       })}
+
+      <Link
+        to="/"
+        onClick={onNavigate}
+        className={cn(navBase, "mt-6 border-transparent text-navy hover:bg-card/70")}
+      >
+        <Users className="size-[1.15rem] shrink-0 text-navy/70" />
+        <span className="flex-1">Switch console</span>
+      </Link>
     </nav>
   );
 }
@@ -65,7 +75,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen w-full bg-background">
       <aside className="sticky top-0 hidden h-screen w-[17rem] shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-4 py-7 lg:flex">
-        <Link to="/sales/team" className="px-1.5 focus-visible:outline-none">
+        <Link to="/" className="px-1.5 focus-visible:outline-none transition-opacity hover:opacity-85">
           <QPilotLogo />
         </Link>
         <div className="mt-7 flex-1 overflow-y-auto">
@@ -91,7 +101,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
           />
           <div className="relative flex h-full w-72 flex-col border-r border-sidebar-border bg-sidebar px-4 py-6">
             <div className="flex items-center justify-between">
-              <QPilotLogo />
+              <Link to="/" onClick={() => setMobileOpen(false)} className="focus-visible:outline-none transition-opacity hover:opacity-85">
+                <QPilotLogo />
+              </Link>
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}

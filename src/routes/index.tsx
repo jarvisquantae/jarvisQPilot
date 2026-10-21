@@ -113,7 +113,9 @@ function LandingPage() {
       <div className="grid-veil pointer-events-none absolute inset-x-0 top-0 h-[560px]" aria-hidden="true" />
 
       <header className="relative mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-5 py-6 sm:px-8">
-        <QPilotLogo />
+        <Link to="/" className="focus-visible:outline-none transition-opacity hover:opacity-85">
+          <QPilotLogo />
+        </Link>
         <div className="flex items-center gap-2.5">
           <span className="hidden rounded-xl border border-border/70 bg-card/70 px-3 py-2 text-xs font-bold text-navy backdrop-blur sm:block">
             {QUARTER_LABEL}

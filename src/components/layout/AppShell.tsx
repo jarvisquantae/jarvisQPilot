@@ -128,7 +128,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen w-full bg-background">
       <aside className="sticky top-0 hidden h-screen w-[17rem] shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-4 py-7 lg:flex">
-        <Link to="/dashboard" className="px-1.5 focus-visible:outline-none">
+        <Link to="/" className="px-1.5 focus-visible:outline-none transition-opacity hover:opacity-85">
           <QPilotLogo />
         </Link>
         <div className="mt-9 flex-1 overflow-y-auto">
@@ -148,7 +148,9 @@ export function AppShell({
           />
           <div className="relative flex h-full w-72 flex-col border-r border-sidebar-border bg-sidebar px-4 py-6">
             <div className="flex items-center justify-between">
-              <QPilotLogo />
+              <Link to="/" onClick={() => setMobileOpen(false)} className="focus-visible:outline-none transition-opacity hover:opacity-85">
+                <QPilotLogo />
+              </Link>
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}

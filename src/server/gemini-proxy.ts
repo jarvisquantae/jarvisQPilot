@@ -82,12 +82,11 @@ export async function executeGeminiEvaluation(
   }
 
   // Model selection per Google AI Studio current availability:
-  // - For transcription-only: gemini-3.5-transcribe first, followed by gemini-3.8-flash
-  // - For evaluation / multimodal assessment: gemini-3.8-flash first, followed by gemini-2.5-flash
+  // gemini-3.8-flash is the active multimodal model with audio understanding
   const models =
     payload.task === "transcribe"
-      ? ["gemini-3.5-transcribe", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest"]
-      : ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+      ? ["gemini-3.5-transcribe", "gemini-3.8-flash", "gemini-flash-latest"]
+      : ["gemini-3.8-flash", "gemini-flash-latest"];
 
   const attempts: ModelAttemptRecord[] = [];
   let lastHttpStatus = 500;
@@ -124,8 +123,15 @@ export async function executeGeminiEvaluation(
         ],
         generationConfig:
           payload.task === "transcribe"
-            ? { temperature: 0.1 }
-            : { responseMimeType: "application/json", temperature: 0.2 },
+            ? {
+                temperature: 0.1,
+                thinkingConfig: { thinkingBudget: 0 },
+              }
+            : {
+                responseMimeType: "application/json",
+                temperature: 0.2,
+                thinkingConfig: { thinkingBudget: 0 },
+              },
       };
 
       const response = await fetch(endpoint, {
